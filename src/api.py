@@ -321,18 +321,10 @@ class SolarEdge:
 
 
     def _fetch_remote(self, start_date: str, end_date: str) -> pd.DataFrame | None:
-        naa = pd.Timestamp.now(tz=SITE_TZ)
-        start_dato = naa - pd.Timedelta(days=7)
-        start_tid  = start_dato.replace(hour=0, minute=0, second=0).strftime('%Y-%m-%d %H:%M:%S')
-        slutt_tid  = naa.strftime('%Y-%m-%d %H:%M:%S')
-        print(start_tid, slutt_tid)
-
-        start_time = start_tid + ' 00:00:00'
-        end_time   = start_tid + ' 29:59:59'
-
-        # end_date   = end_date.replace(hour=0, minute=0, second=0).strftime('%Y-%m-%d %H:%M:%S')
-
-        print(start_date, slutt_tid)
+        
+        start_time = start_date + ' 00:00:00'
+        end_time   = end_date + ' 23:59:00'
+        print(start_time, end_time)
 
 
         params  = {'api_key': self.api_key, 'startTime': start_time, 'endTime': end_time}
@@ -359,7 +351,7 @@ class SolarEdge:
         df_se.set_index('date', inplace=True)
         df_se.index = df_se.index.tz_localize(SITE_TZ, ambiguous='NaT', nonexistent='NaT')
 
-        df_se['effekt_kw'] = df_se['value'] / 1000.0
+        df_se['power_kw'] = df_se['value'] / 1000.0
 
         return df_se
         

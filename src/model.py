@@ -11,12 +11,14 @@ from pvlib.ivtools.sdm import fit_cec_sam
 SITE_LAT = 63.4183333
 SITE_LON = 10.4008333
 SITE_TZ = 'Europe/Oslo'
+ALTITUDE = 60
+LOCATION_NAME = 'NTNU Elektro'
 SE_SHADING_FACTOR = 0.554
 
 
 class DigitalTwin:
     def __init__(self):
-        self.site: Location    = Location(SITE_LAT, SITE_LON, tz=SITE_TZ, altitude=60, name ='NTNU Elektro')
+        self.site: Location    = Location(SITE_LAT, SITE_LON, tz=SITE_TZ, altitude=ALTITUDE, name=LOCATION_NAME)
         self.inverter          = None
         self.model: ModelChain = None
 
@@ -139,7 +141,8 @@ class DigitalTwin:
         return simulert_ac_kw, sapm_fallback_maske
 
 
-    def calculate_power_pvgis(self, tmy_df):
+    def calculate_power_pvgis(self, tmy_df: pd.DataFrame) -> pd.DataFrame:
+        print(tmy_df)
 
         weather = pd.DataFrame({
             'ghi':        tmy_df['ghi'].clip(lower=0),
@@ -173,5 +176,8 @@ class DigitalTwin:
         ).fillna(0).clip(lower=0) / 1000.0)
 
         gruppert = ac_kw.groupby([ac_kw.index.month, ac_kw.index.day]).sum()
-        return ac_kw
+
+        df = ac_kw.to_frame(name='power_kw')
+
+        return df
         

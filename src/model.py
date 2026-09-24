@@ -14,6 +14,7 @@ SITE_TZ = 'Europe/Oslo'
 ALTITUDE = 60
 LOCATION_NAME = 'NTNU Elektro'
 SE_SHADING_FACTOR = 0.554
+# SE_SHADING_FACTOR = 0.2
 
 
 class DigitalTwin:

@@ -34,19 +34,24 @@ if __name__ == '__main__':
     model.build_model()
     # simulated_data, _ = model.calculate_power(sensor_data)
     simulated_data = model.calculate_power_pvgis(solar_data)
-    simulated_data = simulated_data.resample('15min').interpolate(method='linear')
+    # simulated_data = simulated_data.resample('15min').interpolate(method='linear')
 
     # ui = UI(weather_data, sensor_data, inverter_data, wind_data, simulated_data)
     # ui.render()
 
-    print(simulated_data)
+    print(inverter_data)
+    
 
+    # inverter_data['dt_hours']   = inverter_data.index.to_series().diff().dt.total_seconds() / 3600
+    # inverter_data['energy_kwh'] = inverter_data['power_kw'] * inverter_data['dt_hours']
+    # simulated_data['dt_hours']   = simulated_data.index.to_series().diff().dt.total_seconds() / 3600
+    # simulated_data['energy_kwh'] = simulated_data['power_kw'] * simulated_data['dt_hours']
 
-    inverter_data['dt_hours'] = inverter_data.index.to_series().diff().dt.total_seconds() / 3600
-    inverter_data['energy_kWh'] = inverter_data['power_kw'] * inverter_data['dt_hours']
+    dt_hours = 15 / 60 # Resolution of 15 min -> kwh
+    inverter_data['energy_kwh'] = ((inverter_data['power_kw'] + inverter_data['power_kw'].shift(1)) / 2 * dt_hours )
+    simulated_data['energy_kwh'] = ((simulated_data['power_kw'] + simulated_data['power_kw'].shift(1)) / 2 * dt_hours )
+    
 
-    simulated_data['dt_hours'] = simulated_data.index.to_series().diff().dt.total_seconds() / 3600
-    simulated_data['energy_kWh'] = simulated_data['power_kw'] * simulated_data['dt_hours']
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
 
@@ -69,18 +74,20 @@ if __name__ == '__main__':
     ax1.legend()
     ax1.grid(True)
 
+
+    bar_width = 15 / (24 * 60)  # 15 minutes in days
     ax2.bar(
         simulated_data.index,
-        simulated_data['energy_kWh'],
-        width=0.01,
+        simulated_data['energy_kwh'],
+        width=bar_width,
         label='Simulated',
         alpha=0.6,
     )
 
     ax2.bar(
         inverter_data.index,
-        inverter_data['energy_kWh'],
-        width=0.01,
+        inverter_data['energy_kwh'],
+        width=bar_width,
         label='Inverter',
         alpha=0.6,
     )

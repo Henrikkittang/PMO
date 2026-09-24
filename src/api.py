@@ -168,7 +168,9 @@ class PVGIS:
 
 class OpenMeteo:
     def __init__(self) -> None:
-        self.url = 'https://archive-api.open-meteo.com/v1/archive'
+        # self.url = 'https://archive-api.open-meteo.com/v1/archive'
+        self.url = "https://historical-forecast-api.open-meteo.com/v1/forecast"
+
 
     def fetch(self, start_date: str, end_date: str):
         data =  self._fetch_remote(start_date, end_date)
@@ -176,7 +178,7 @@ class OpenMeteo:
         return data
 
     def _normalize(self, data):
-        df = pd.DataFrame(data['hourly'])
+        df = pd.DataFrame(data['minutely_15'])
 
         df = df.rename(columns={
             'shortwave_radiation': 'ghi',
@@ -198,7 +200,7 @@ class OpenMeteo:
             'longitude': SITE_LON,
             'start_date': start_date,
             'end_date':   end_date,
-            'hourly': [
+            'minutely_15': [
                 'shortwave_radiation',
                 'direct_normal_irradiance',
                 'diffuse_radiation',
@@ -282,11 +284,13 @@ class SolarEdge:
 
     def fetch(self, start_date: str, end_date: str):
 
-        df_se = self._fetch_remote(start_date, end_date)
-        # df_se = pd.DataFrame()
+        data = self._fetch_remote(start_date, end_date)
+        df   = self._normalize(data)
+        return df
+        # df = pd.DataFrame()
 
 
-        if df_se is None or df_se.empty:
+        if df is None or df.empty:
             return None
 
         if os.path.exists(self.filepath):
@@ -294,19 +298,19 @@ class SolarEdge:
             eksisterende_df = self._read_local(self.filepath)
                 
             #fletter sammen
-            oppdatert_df = pd.concat([eksisterende_df, df_se])
+            oppdatert_df = pd.concat([eksisterende_df, df])
             
             #fjerner duplikater/overlapp i nye/gamle verdier
             oppdatert_df = oppdatert_df[~oppdatert_df.index.duplicated(keep='last')]
             oppdatert_df.sort_index(inplace=True)
         else:
-            oppdatert_df = df_se
+            oppdatert_df = df
         
         #lagrer filen
         oppdatert_df.to_csv(self.filepath)
         return oppdatert_df
 
-        
+
     def _read_local(self, filepath: str) -> pd.DataFrame:
         historikk_df = pd.read_csv(filepath, index_col=0, on_bad_lines='skip')
         if historikk_df.empty:
@@ -319,6 +323,19 @@ class SolarEdge:
         historikk_df.sort_index(inplace=True)
         return historikk_df
 
+    def _normalize(self, data):
+        df = pd.DataFrame(data['power']['values'])
+        
+        df['date'] = pd.to_datetime(df['date'])
+        df.set_index('date', inplace=True)
+        df.index = df.index.tz_localize(SITE_TZ, ambiguous='NaT', nonexistent='NaT')
+        
+        df = df.rename(columns={'value': 'power_kw'})
+        df['power_kw'] = df['power_kw'] / 1000
+
+        df = df.fillna(0)
+
+        return df
 
     def _fetch_remote(self, start_date: str, end_date: str) -> pd.DataFrame | None:
         
@@ -336,7 +353,6 @@ class SolarEdge:
             print(f'SolarEdge feil: {e}')
             return None
 
-
         data = response.json()
   
         # Sjekk om kvotestopp er gjemt inne i et 200-svar
@@ -344,16 +360,8 @@ class SolarEdge:
         if 'usage limit' in feilmelding or 'rate limit' in feilmelding:
             print(('⚠️ API-dagskvote nådd! SolarEdge tillater maks 300 kall/dag. Viser lagret historikk.'))
             return None
-
-        df_se = pd.DataFrame(data['power']['values'])
-
-        df_se['date'] = pd.to_datetime(df_se['date'])
-        df_se.set_index('date', inplace=True)
-        df_se.index = df_se.index.tz_localize(SITE_TZ, ambiguous='NaT', nonexistent='NaT')
-
-        df_se['power_kw'] = df_se['value'] / 1000.0
-
-        return df_se
+        
+        return data
         
 
 class API:

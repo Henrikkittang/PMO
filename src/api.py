@@ -368,6 +368,57 @@ class SolarEdge:
         return data
         
 
+class NordPool:
+    def __init__(self):
+        self.url = 'https://dataportal-api.nordpoolgroup.com/api/DayAheadPriceIndices'
+
+
+    def fetch(self):
+        data = self._fetch_remote()
+        data = self._normalize(data)
+        return data
+
+    def _normalize(self, data):
+      
+
+        df = pd.DataFrame([
+            {
+                'timestamp': item['deliveryStart'],
+                'price_nok_mwh': item['entryPerArea']['NO3']
+            }
+            for item in data['multiIndexEntries']
+        ])
+
+        df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
+        df['timestamp'] = df['timestamp'].dt.tz_convert(SITE_TZ)
+        df['price_nok_kwh'] = df['price_nok_mwh'] / 1000
+
+        print(df)
+
+        return df
+
+    def _fetch_remote(self):
+            
+        
+        params = {
+            'currency': 'NOK', 
+            'market': 'DayAhead', 
+            'date': '2026-09-22', 
+            'resolutionInMinutes': 15, 
+            'indexNames': 'NO3'
+        }
+
+        try:
+            response = requests.get(self.url, params=params, timeout=15)
+            response.raise_for_status()
+        except Exception as e:
+            print(f'NordPool error: {e}')
+            return None
+
+        data = response.json()
+        
+        return data
+
 class API:
     def __init__(self):
         self.weather   = MET()
@@ -382,4 +433,23 @@ class API:
 if __name__ == '__main__':
 
 
-   pass
+    nordpool = NordPool()
+    df       = nordpool.fetch()
+
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(12, 5))
+
+    plt.plot(
+        df.index,
+        df['price_nok_kwh'],
+        linewidth=1.5
+    )
+
+    plt.xlabel('Time')
+    plt.ylabel('Price [NOK/kWh]')
+    plt.title('Nord Pool NO1 Electricity Price')
+    plt.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()

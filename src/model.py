@@ -12,16 +12,14 @@ SITE_LAT = 63.4183333
 SITE_LON = 10.4008333
 SITE_TZ = 'Europe/Oslo'
 ALTITUDE = 60
-LOCATION_NAME = 'NTNU Elektro'
-SE_SHADING_FACTOR = 0.554
-# SE_SHADING_FACTOR = 0.2
 
 
 class DigitalTwin:
     def __init__(self):
-        self.site: Location    = Location(SITE_LAT, SITE_LON, tz=SITE_TZ, altitude=ALTITUDE, name=LOCATION_NAME)
+        self.site: Location    = Location(SITE_LAT, SITE_LON, tz=SITE_TZ, altitude=ALTITUDE)
         self.inverter          = None
         self.model: ModelChain = None
+        self.shading_factor    = 0.554
 
     def build_model(self) -> None:
         
@@ -76,11 +74,11 @@ class DigitalTwin:
         self.model = ModelChain(system, self.site, aoi_model='physical', spectral_model='no_loss')
 
 
-    def calculate_power(self, arbeids_df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    def calculate_power_idk(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
         #Felles pvlib-kjerne for bygg_ui_dataframe og kjor_pvlib_simulering.
         #Returnerer (simulert_ac_kw, sapm_fallback_maske).
-        solpos = self.site.get_solarposition(arbeids_df.index)
-        irrad_components = pvlib.irradiance.erbs(arbeids_df['GHI_avg'], solpos['zenith'], arbeids_df.index)
+        solpos = self.site.get_solarposition(df.index)
+        irrad_components = pvlib.irradiance.erbs(df['GHI_avg'], solpos['zenith'], df.index)
         
         #CS241 måler modultemperatur (T_mod, bakflate). Konverter til celletemperatur
         #med SAPM: T_cell = T_mod + ΔT × (POA / 1000), der POA er for array 5 (tilt=48°, asimut=246°).
@@ -89,11 +87,11 @@ class DigitalTwin:
             surface_tilt=48, surface_azimuth=246,
             solar_zenith=solpos['apparent_zenith'], solar_azimuth=solpos['azimuth'],
             dni=irrad_components['dni'].fillna(0).clip(lower=0),
-            ghi=arbeids_df['GHI_avg'],
+            ghi=df['GHI_avg'],
             dhi=irrad_components['dhi'].fillna(0).clip(lower=0),
         )['poa_global'].fillna(0).clip(lower=0)
     
-        t_mod_cs241 = arbeids_df['CellTemp_avg'].copy() if 'CellTemp_avg' in arbeids_df.columns else pd.Series(np.nan, index=arbeids_df.index)
+        t_mod_cs241 = df['CellTemp_avg'].copy() if 'CellTemp_avg' in df.columns else pd.Series(np.nan, index=df.index)
         cell_temp = t_mod_cs241 + sapm_params['deltaT'] * poa_cs241 / 1000.0
     
         sapm_fallback_maske = t_mod_cs241.isna()   #True der CS241-sensor mangler data
@@ -101,20 +99,20 @@ class DigitalTwin:
             #Fallback: estimer T_cell direkte fra SAPM når CS241 er frakoblet
             cell_temp_sapm = pvlib.temperature.sapm_cell(
                 poa_global=poa_cs241,
-                temp_air=arbeids_df['AirTemp_avg'].fillna(10),
-                wind_speed=arbeids_df['wind_speed'].fillna(1.0),
+                temp_air=df['AirTemp_avg'].fillna(10),
+                wind_speed=df['wind_speed'].fillna(1.0),
                 **sapm_params
             )
             cell_temp = cell_temp.fillna(cell_temp_sapm)
     
         weather = pd.DataFrame({
-            'ghi':              arbeids_df['GHI_avg'],
+            'ghi':              df['GHI_avg'],
             'dhi':              irrad_components['dhi'].fillna(0).clip(lower=0),
             'dni':              irrad_components['dni'].fillna(0).clip(lower=0),
-            'temp_air':         arbeids_df['AirTemp_avg'],
-            'wind_speed':       arbeids_df['wind_speed'],
+            'temp_air':         df['AirTemp_avg'],
+            'wind_speed':       df['wind_speed'],
             'cell_temperature': cell_temp,
-        }, index=arbeids_df.index)
+        }, index=df.index)
     
         self.model.run_model(weather)
         dc_results = self.model.results.dc
@@ -123,8 +121,8 @@ class DigitalTwin:
         p_dc_per_array = [
             dc_results[0]['p_mp'],
             dc_results[1]['p_mp'],
-            dc_results[2]['p_mp'] * SE_SHADING_FACTOR,
-            dc_results[3]['p_mp'] * SE_SHADING_FACTOR,
+            dc_results[2]['p_mp'] * self.shading_factor,
+            dc_results[3]['p_mp'] * self.shading_factor,
             dc_results[4]['p_mp'],
             dc_results[5]['p_mp'],
         ]
@@ -142,16 +140,14 @@ class DigitalTwin:
         return simulert_ac_kw, sapm_fallback_maske
 
 
-    def calculate_power_pvgis(self, tmy_df: pd.DataFrame) -> pd.DataFrame:
-        print(tmy_df)
-
+    def calculate_power(self, df: pd.DataFrame) -> pd.DataFrame:
         weather = pd.DataFrame({
-            'ghi':        tmy_df['ghi'].clip(lower=0),
-            'dni':        tmy_df['dni'].clip(lower=0),
-            'dhi':        tmy_df['dhi'].clip(lower=0),
-            'temp_air':   tmy_df['temp_air'],
-            'wind_speed': tmy_df['wind_speed'].clip(lower=0),
-        }, index=tmy_df.index)
+            'ghi':        df['ghi'].clip(lower=0),
+            'dni':        df['dni'].clip(lower=0),
+            'dhi':        df['dhi'].clip(lower=0),
+            'temp_air':   df['temp_air'],
+            'wind_speed': df['wind_speed'].clip(lower=0),
+        }, index=df.index)
 
         self.model.run_model(weather)
         dc = self.model.results.dc
@@ -159,8 +155,8 @@ class DigitalTwin:
         p_dc = [
             dc[0]['p_mp'],
             dc[1]['p_mp'],
-            dc[2]['p_mp'] * SE_SHADING_FACTOR,
-            dc[3]['p_mp'] * SE_SHADING_FACTOR,
+            dc[2]['p_mp'] * self.shading_factor,
+            dc[3]['p_mp'] * self.shading_factor,
             dc[4]['p_mp'],
             dc[5]['p_mp'],
         ]

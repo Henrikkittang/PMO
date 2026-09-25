@@ -23,8 +23,8 @@ if __name__ == '__main__':
 
     # weather_data = api.weather.fetch()
 
-    start_date = '2026-09-01'
-    end_date   = '2026-09-10'
+    start_date = '2026-09-10'
+    end_date   = '2026-09-23'
 
     inverter_data = api.solaredge.fetch(start_date, end_date)
     solar_data = api.openmeteo.fetch(start_date, end_date)
@@ -33,7 +33,7 @@ if __name__ == '__main__':
     model = DigitalTwin()
     model.build_model()
     # simulated_data, _ = model.calculate_power(sensor_data)
-    simulated_data = model.calculate_power_pvgis(solar_data)
+    simulated_data = model.calculate_power(solar_data)
     # simulated_data = simulated_data.resample('15min').interpolate(method='linear')
 
     # ui = UI(weather_data, sensor_data, inverter_data, wind_data, simulated_data)
@@ -41,17 +41,9 @@ if __name__ == '__main__':
 
     print(inverter_data)
     
-
-    # inverter_data['dt_hours']   = inverter_data.index.to_series().diff().dt.total_seconds() / 3600
-    # inverter_data['energy_kwh'] = inverter_data['power_kw'] * inverter_data['dt_hours']
-    # simulated_data['dt_hours']   = simulated_data.index.to_series().diff().dt.total_seconds() / 3600
-    # simulated_data['energy_kwh'] = simulated_data['power_kw'] * simulated_data['dt_hours']
-
     dt_hours = 15 / 60 # Resolution of 15 min -> kwh
     inverter_data['energy_kwh'] = ((inverter_data['power_kw'] + inverter_data['power_kw'].shift(1)) / 2 * dt_hours )
     simulated_data['energy_kwh'] = ((simulated_data['power_kw'] + simulated_data['power_kw'].shift(1)) / 2 * dt_hours )
-    
-
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
 
@@ -69,8 +61,8 @@ if __name__ == '__main__':
         linewidth=2,
     )
 
-    ax1.set_ylabel('Effekt (kW)')
-    ax1.set_title('Effekt og energiproduksjon')
+    ax1.set_ylabel('Power (kW)')
+    ax1.set_title('Power and energy production')
     ax1.legend()
     ax1.grid(True)
 
@@ -92,11 +84,17 @@ if __name__ == '__main__':
         alpha=0.6,
     )
 
-    ax2.set_xlabel('Tid')
-    ax2.set_ylabel('Energi (kWh)')
+    ax2.set_xlabel('Time')
+    ax2.set_ylabel('Energy (kWh)')
     ax2.legend()
     ax2.grid(True)
+    ax2.set_xlim(inverter_data.index.min(), inverter_data.index.max())
 
+    # Show every day
+    ax2.xaxis.set_major_locator(mdates.DayLocator())
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m'))
+
+    plt.xticks(rotation=45)
 
     plt.tight_layout()
     plt.show()

@@ -13,11 +13,11 @@ SITE_LAT = 63.4183333
 SITE_LON = 10.4008333
 
 
-class Weather:
+class MET:
     # Returns weather data
 
     def __init__(self):
-        self.url     = f'https://api.met.no/weatherapi/locationforecast/2.0/compact?lat={round(63.4183333, 4)}&lon={round(10.4008333, 4)}'
+        self.url     = f'https://api.met.no/weatherapi/locationforecast/2.0/compact?lat={round(SITE_LAT, 4)}&lon={round(SITE_LON, 4)}'
         self.headers = {'User-Agent': ''}
 
     def fetch(self):
@@ -169,7 +169,8 @@ class PVGIS:
 class OpenMeteo:
     def __init__(self) -> None:
         # self.url = 'https://archive-api.open-meteo.com/v1/archive'
-        self.url = "https://historical-forecast-api.open-meteo.com/v1/forecast"
+        # self.url = 'https://historical-forecast-api.open-meteo.com/v1/forecast'
+        self.url = 'https://api.open-meteo.com/v1/forecast'
 
 
     def fetch(self, start_date: str, end_date: str):
@@ -208,7 +209,7 @@ class OpenMeteo:
                 'wind_speed_10m',
                 'cloud_cover',
             ],
-            'timezone': 'Europe/Oslo',
+            'timezone': SITE_TZ,
         }
 
 
@@ -221,6 +222,7 @@ class OpenMeteo:
         data = response.json()
 
         return data
+
 
 class Sensor:
     # Sensor data from elektrobygget
@@ -282,7 +284,9 @@ class SolarEdge:
         self.url     = f'https://monitoringapi.solaredge.com/site/{self.site_id}/power'
         self.filepath = './data/solaredge_master.csv'
 
+
     def fetch(self, start_date: str, end_date: str):
+        ''' *start_date* and end_date can maximum be 14 days apart'''
 
         data = self._fetch_remote(start_date, end_date)
         df   = self._normalize(data)
@@ -366,7 +370,7 @@ class SolarEdge:
 
 class API:
     def __init__(self):
-        self.weather   = Weather()
+        self.weather   = MET()
         self.frost     = Frost()
         self.sensor    = Sensor()
         self.pvgis     = PVGIS()
@@ -378,21 +382,4 @@ class API:
 if __name__ == '__main__':
 
 
-   
-
-    apis = {
-        'Weather': Weather(),
-        'Frost': Frost(),
-        'Sensor': Sensor(),
-        'SolarEdge': SolarEdge()
-    } 
-
-    print(apis['Frost'].fetch('2026-05-19', '2026-05-19'))
-
-    for name, api in apis.items():
-        try:
-            result = api.fetch()
-        except:
-            pass
-        if result is None:
-            print( f'API does not work: {name}' )
+   pass

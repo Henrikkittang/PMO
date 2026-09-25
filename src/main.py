@@ -27,7 +27,8 @@ if __name__ == '__main__':
     end_date   = '2026-09-23'
 
     inverter_data = api.solaredge.fetch(start_date, end_date)
-    solar_data = api.openmeteo.fetch(start_date, end_date)
+    solar_data    = api.openmeteo.fetch(start_date, end_date)
+    nordpool_data = api.nordpool.fetch(start_date, end_date, 'NO3')
 
     # Digital twin
     model = DigitalTwin()
@@ -39,7 +40,7 @@ if __name__ == '__main__':
     # ui = UI(weather_data, sensor_data, inverter_data, wind_data, simulated_data)
     # ui.render()
 
-    print(inverter_data)
+  
     
     dt_hours = 15 / 60 # Resolution of 15 min -> kwh
     inverter_data['energy_kwh'] = ((inverter_data['power_kw'] + inverter_data['power_kw'].shift(1)) / 2 * dt_hours )
@@ -61,9 +62,22 @@ if __name__ == '__main__':
         linewidth=2,
     )
 
+
+    ax1_price = ax1.twinx()
+    ax1_price.step(
+        nordpool_data.index,
+        nordpool_data['price_nok_kwh'],
+        where='post',
+        label='Nord Pool',
+        color='green',
+        linewidth=1.5,
+    )
+    ax1_price.set_ylabel('Electricity price (NOK/kWh)')
+
     ax1.set_ylabel('Power (kW)')
     ax1.set_title('Power and energy production')
     ax1.legend()
+    ax1_price.legend()
     ax1.grid(True)
 
 

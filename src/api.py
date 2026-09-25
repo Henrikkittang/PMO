@@ -13,7 +13,6 @@ SITE_TZ = 'Europe/Oslo'
 SITE_LAT = 63.4183333
 SITE_LON = 10.4008333
 
-
 class MET:
     # Returns weather data
 
@@ -35,7 +34,7 @@ class MET:
         return {
             'air_temperature': instant_data['air_temperature'],
             'wind_speed':      instant_data['wind_speed'],
-            'weathercode':     symbol_code,
+            'weather_code':     symbol_code,
             'forecast_time':   forecast_time,
         }
     
@@ -414,7 +413,9 @@ class NordPool:
         df['timestamp'] = df['timestamp'].dt.tz_convert(SITE_TZ)
         df['price_nok_kwh'] = df['price_nok_mwh'] / 1000
 
-        print(df)
+        df = df.sort_values('timestamp')
+        df = df.set_index('timestamp')
+
 
         return df
 
@@ -448,6 +449,7 @@ class API:
         self.pvgis     = PVGIS()
         self.solaredge = SolarEdge()
         self.openmeteo = OpenMeteo()
+        self.nordpool  = NordPool()
 
 # Testing APIs
 
@@ -461,21 +463,23 @@ if __name__ == '__main__':
     nordpool = NordPool()
     df       = nordpool.fetch(start_date, end_date, 'NO3')
 
+
+
     import matplotlib.pyplot as plt
 
     plt.figure(figsize=(12, 5))
 
     plt.plot(
-        df['timestamp'],
+        df.index,
         df['price_nok_kwh'],
-        linewidth=1.5
+        linewidth=1.5,
+        drawstyle='steps-post'
     )
 
     plt.xlabel('Time')
     plt.ylabel('Price [NOK/kWh]')
     plt.title('Nord Pool NO3 Electricity Price')
     plt.grid(True, alpha=0.3)
-
 
     # plt.gca().xaxis.set_major_locator(mdates.DayLocator())
     # plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%d.%m'))

@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import collections
 import io
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 import env
@@ -373,18 +374,38 @@ class NordPool:
         self.url = 'https://dataportal-api.nordpoolgroup.com/api/DayAheadPriceIndices'
 
 
-    def fetch(self):
-        data = self._fetch_remote()
-        data = self._normalize(data)
-        return data
+    def fetch(self, start_date, end_date, price_zone):
 
-    def _normalize(self, data):
+
+        dates = pd.date_range(start_date, end_date, freq='D')
+
+        with ThreadPoolExecutor(max_workers=16) as executor:
+
+            results = executor.map(
+                lambda date: self._fetch_remote(
+                    date.strftime('%Y-%m-%d'),
+                    price_zone
+                ),
+                dates
+            )
+
+        all_data = []
+
+        for data in results:
+            if data is not None:
+                all_data.extend(data['multiIndexEntries'])
+
+        data = {'multiIndexEntries': all_data}
+
+        return self._normalize(data, price_zone)
+
+    def _normalize(self, data, price_zone):
       
 
         df = pd.DataFrame([
             {
                 'timestamp': item['deliveryStart'],
-                'price_nok_mwh': item['entryPerArea']['NO3']
+                'price_nok_mwh': item['entryPerArea'][price_zone]
             }
             for item in data['multiIndexEntries']
         ])
@@ -397,15 +418,15 @@ class NordPool:
 
         return df
 
-    def _fetch_remote(self):
+    def _fetch_remote(self, date, price_zone):
             
         
         params = {
             'currency': 'NOK', 
             'market': 'DayAhead', 
-            'date': '2026-09-22', 
+            'date': date, 
             'resolutionInMinutes': 15, 
-            'indexNames': 'NO3'
+            'indexNames': price_zone
         }
 
         try:
@@ -433,23 +454,31 @@ class API:
 if __name__ == '__main__':
 
 
+    start_date = '2026-09-10'
+    end_date   = '2026-09-23'
+    
+
     nordpool = NordPool()
-    df       = nordpool.fetch()
+    df       = nordpool.fetch(start_date, end_date, 'NO3')
 
     import matplotlib.pyplot as plt
 
     plt.figure(figsize=(12, 5))
 
     plt.plot(
-        df.index,
+        df['timestamp'],
         df['price_nok_kwh'],
         linewidth=1.5
     )
 
     plt.xlabel('Time')
     plt.ylabel('Price [NOK/kWh]')
-    plt.title('Nord Pool NO1 Electricity Price')
+    plt.title('Nord Pool NO3 Electricity Price')
     plt.grid(True, alpha=0.3)
 
+
+    # plt.gca().xaxis.set_major_locator(mdates.DayLocator())
+    # plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%d.%m'))
+ 
     plt.tight_layout()
     plt.show()

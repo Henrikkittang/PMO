@@ -18,7 +18,8 @@ class UI:
         # self.end_date   = '2026-09-23'
 
         self.periods = ['24t', '7d', '30d', 'År']
-        st.session_state['period'] = '24t'
+        if 'period' not in st.session_state:
+            st.session_state['period'] = '24t'
        
         st.set_page_config(
             page_title="Digital Tvilling: NTNU Gløshaugen",
@@ -395,14 +396,12 @@ class UI:
         with c2:
             st.markdown('<div class="control-label">Periode</div>', unsafe_allow_html=True)
             period = st.radio(
-                "Periode",
-                ["24t", "7d", "30d", "År"],
+                'Periode',
+                ['24t', '7d', '30d', 'År'],
                 horizontal=True,
                 label_visibility="collapsed",
-                key="period",
+                key='period',
             )
-
-        st.session_state['period'] = period
 
         if datatype == 'Effekt (kW)':
              

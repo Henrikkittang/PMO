@@ -34,7 +34,7 @@ class UI:
     def render(self):
         self._render_sidebar()
         self._render_main()
-        self._render_summary()
+        # self._render_summary()
 
     def _load_styles(self):
 
@@ -266,7 +266,7 @@ class UI:
        
         weather_data   = self.api.met.fetch()
         weather_symbol = self._weather_code_to_text( weather_data['weather_code'] ) 
-        
+
       
         with st.sidebar:
             st.markdown('<div class="sidebar-title">Været nå (Gløshaugen)</div>', unsafe_allow_html=True)
@@ -280,7 +280,7 @@ class UI:
                 <div class="sidebar-value">{ weather_data['wind_speed'] } m/s</div>
                 <div class="sidebar-label">Temperatur</div>
                 <div class="sidebar-value">{ weather_data['air_temperature'] } °C</div>
-                <div class="sidebar-source">MET.no</div>
+                <div class="sidebar-source">Kilde: MET.no</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -289,18 +289,18 @@ class UI:
                 <div class="sidebar-title" style="margin-top:18px;">
                     Sensormålinger (Taket)
                 </div>
-                <div class="sidebar-label">Tidspunkt: 21.05.2026 22:48:20</div>
+                <div class="sidebar-label">Tidspunkt: -</div>
                 <div style="margin-top:22px;">
                     <div class="sidebar-label">Pyranometer</div>
-                    <div class="sidebar-value">0 W/m²</div>
+                    <div class="sidebar-value">- W/m²</div>
                 </div>
                 <div style="margin-top:18px;">
                     <div class="sidebar-label">Modultemperatur</div>
-                    <div class="sidebar-value">12.3 °C</div>
+                    <div class="sidebar-value">- °C</div>
                 </div>
                 <div style="margin-top:18px;">
                     <div class="sidebar-label">Omgivelsestemperatur</div>
-                    <div class="sidebar-value">12.5 °C</div>
+                    <div class="sidebar-value">- °C</div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -359,7 +359,7 @@ class UI:
 
         with m3:
             st.markdown('<div class="metric-label">Ytelsesratio</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="metric-value">{inverter_energy_sum/simulated_energy_sum:.2f} </div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-value">{(inverter_energy_sum/simulated_energy_sum)*100:.2f} %</div>', unsafe_allow_html=True)
 
         with m4:
             st.markdown('<div class="metric-label">Avik energi</div>', unsafe_allow_html=True)

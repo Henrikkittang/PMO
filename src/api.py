@@ -341,7 +341,7 @@ class SolarEdge:
 
     def __init__(self):
         self.url     = f'https://monitoringapi.solaredge.com/site/{env.SOLAREDGE_SITE}/power'
-        self.cache   = Cache('./api_cache/SolarEdge', self._normalize, self._fetch_remote)
+        # self.cache   = Cache('./api_cache/SolarEdge', self._normalize, self._fetch_remote)
 
 
     def fetch(self, start_date: str, end_date: str):
@@ -351,8 +351,10 @@ class SolarEdge:
         end_time   = end_date   + ' 23:59:00'
         params  = {'api_key': env.SOLAREDGE_KEY, 'startTime': start_time, 'endTime': end_time}
 
-        
-        df = self.cache.fetch(start_date, end_date, params)
+        data = self._fetch_remote(params)
+        df   = self._normalize(data)
+
+        # df = self.cache.fetch(start_date, end_date, params)
 
         return df
        

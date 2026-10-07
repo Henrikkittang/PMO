@@ -12,7 +12,10 @@ from ui import UI
 
 if __name__ == '__main__':
 
-   
+    ui = UI()
+    ui.render()
+        
+    quit()
 
     api = API()
 
@@ -40,7 +43,7 @@ if __name__ == '__main__':
     # ui = UI(weather_data, sensor_data, inverter_data, wind_data, simulated_data)
     # ui.render()
 
-  
+   
     
     dt_hours = 15 / 60 # Resolution of 15 min -> kwh
     inverter_data['energy_kwh'] = ((inverter_data['power_kw'] + inverter_data['power_kw'].shift(1)) / 2 * dt_hours )

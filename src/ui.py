@@ -5,16 +5,18 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 
-
+from api import API
+from model import DigitalTwin
 
 class UI:
 
-    def __init__(self, weather_data, sensor_data, inverter_data, wind_data, simulated_data) -> None:
-        self.weather_data   = weather_data
-        self.sensor_data    = sensor_data
-        self.inverter_data  = inverter_data
-        self.wind_data      = wind_data
-        self.simulated_data = simulated_data
+    def __init__(self) -> None:
+        self.api   = API()
+        self.model = DigitalTwin()
+
+        self.start_date = '2026-09-10'
+        self.end_date   = '2026-09-23'
+        
         # ------------------------------------------------------------
         # Page configuration
         # ------------------------------------------------------------
@@ -25,7 +27,9 @@ class UI:
             initial_sidebar_state="expanded",
         )
 
+        self.model.build_model()
         self._load_styles()
+
 
     def render(self):
         self._render_sidebar()
@@ -272,7 +276,7 @@ class UI:
             st.markdown("""
             <div class="sidebar-section">
                 <div style="font-size:13px;font-weight:650;margin:12px 0 18px 0;">
-                    ☁️ Oversynet
+                    ☁️ Overskyet
                 </div>
                 <div class="sidebar-label">Vind</div>
                 <div class="sidebar-value">1.1 m/s</div>
@@ -313,6 +317,16 @@ class UI:
 
     def _render_main(self):
 
+        inverter_data = self.api.solaredge.fetch(self.start_date, self.end_date)
+        solar_data    = self.api.openmeteo.fetch(self.start_date, self.end_date)
+
+        simulated_data = self.model.calculate_power(solar_data)
+
+        dt_hours = 15 / 60 # Resolution of 15 min -> kwh
+        inverter_data['energy_kwh']  = ((inverter_data['power_kw'] + inverter_data['power_kw'].shift(1)) / 2 * dt_hours )
+        simulated_data['energy_kwh'] = ((simulated_data['power_kw'] + simulated_data['power_kw'].shift(1)) / 2 * dt_hours )
+        
+
         # ------------------------------------------------------------
         # Main content
         # ------------------------------------------------------------
@@ -331,125 +345,112 @@ class UI:
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown('<div class="section-title">Sanntidsdata</div>',
-                    unsafe_allow_html=True)
+        st.markdown('<div class="section-title">Sanntidsdata</div>', unsafe_allow_html=True)
 
         # Metrics + chart controls
-        left, right = st.columns([0.40, 0.60], gap="large")
+        # left, right = st.columns([0.40, 0.60], gap="large")
 
-        with left:
-            m1, m2 = st.columns(2)
+        # with left:
+        m1, m2, m3, m4 = st.columns(4)
 
-            with m1:
-                st.markdown('<div class="metric-label">Simulert effekt</div>',
-                            unsafe_allow_html=True)
-                st.markdown('<div class="metric-value">0.00 kW</div>',
-                            unsafe_allow_html=True)
+        with m1:
+            st.markdown('<div class="metric-label">Simulert effekt</div>', unsafe_allow_html=True)
+            st.markdown('<div class="metric-value">0.00 kW</div>', unsafe_allow_html=True)
 
-            with m2:
-                st.markdown('<div class="metric-label">Målt effekt</div>',
-                            unsafe_allow_html=True)
-                st.markdown('<div class="metric-value">1.54 kW</div>',
-                            unsafe_allow_html=True)
+        with m2:
+            st.markdown('<div class="metric-label">Målt effekt</div>', unsafe_allow_html=True)
+            st.markdown('<div class="metric-value">1.54 kW</div>', unsafe_allow_html=True)
 
-            m3, m4 = st.columns(2)
+        with m3:
+            st.markdown('<div class="metric-label">Ytelsesratio</div>', unsafe_allow_html=True)
+            st.markdown('<div class="metric-value">-</div>', unsafe_allow_html=True)
 
-            with m3:
-                st.markdown('<div class="metric-label">Ytelsesratio ⓘ</div>',
-                            unsafe_allow_html=True)
-                st.markdown('<div class="metric-value">-</div>',
-                            unsafe_allow_html=True)
+        with m4:
+            st.markdown('<div class="metric-label">Residual effekt</div>', unsafe_allow_html=True)
+            st.markdown('<div class="metric-value">-1.54 kW</div>', unsafe_allow_html=True)
 
-            with m4:
-                st.markdown('<div class="metric-label">Residual effekt</div>',
-                            unsafe_allow_html=True)
-                st.markdown('<div class="metric-value">-1.54 kW</div>',
-                            unsafe_allow_html=True)
+        # with right:
+        c1, c2 = st.columns([0.53, 0.47])
 
-        with right:
-            c1, c2 = st.columns([0.53, 0.47])
-
-            with c1:
-                st.markdown('<div class="control-label">Datatype</div>',
-                            unsafe_allow_html=True)
-                datatype = st.radio(
-                    "Datatype",
-                    ["Effekt (kW)", "Energi (kWh)"],
-                    horizontal=True,
-                    label_visibility="collapsed",
-                    key="datatype",
-                )
-
-            with c2:
-                st.markdown('<div class="control-label">Periode</div>',
-                            unsafe_allow_html=True)
-                period = st.radio(
-                    "Periode",
-                    ["24t", "7d", "30d", "År"],
-                    horizontal=True,
-                    label_visibility="collapsed",
-                    key="period",
-                )
-
-            # Plot
-            fig = go.Figure()
-
-            fig.add_trace(go.Scatter(
-                x=self.sensor_data.index,
-                y=self.sensor_data.values,
-                mode="lines",
-                name="Målt (SolarEdge)",
-                line=dict(width=2),
-                hovertemplate="%{x|%d.%m.%Y %H:%M}<br>Målt: %{y:.2f} kW<extra></extra>",
-            ))
-
-            fig.add_trace(go.Scatter(
-                x=self.simulated_data.index,
-                y=self.simulated_data.values,
-                mode="lines",
-                name="Simulert (Digital Tvilling)",
-                line=dict(width=2),
-                hovertemplate="%{x|%d.%m.%Y %H:%M}<br>Simulert: %{y:.2f} kW<extra></extra>",
-            ))
-
-            fig.update_layout(
-                title=dict(
-                    text="Faktisk vs Simulert Effektproduksjon",
-                    font=dict(size=12, color="#d7d7db"),
-                    x=0,
-                    xanchor="left",
-                ),
-                height=300,
-                margin=dict(l=48, r=12, t=43, b=38),
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(color="#a5a6af", size=10),
-                hovermode="x unified",
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.03,
-                    xanchor="right",
-                    x=1,
-                    font=dict(size=10),
-                ),
-                xaxis=dict(
-                    showgrid=False,
-                    zeroline=False,
-                    tickfont=dict(size=9),
-                    linecolor="#30313a",
-                ),
-                yaxis=dict(
-                    title=dict(text="Effekt (kW)", font=dict(size=10)),
-                    showgrid=True,
-                    gridcolor="#282932",
-                    zeroline=False,
-                    tickfont=dict(size=9),
-                    rangemode="tozero",
-                ),
+        with c1:
+            st.markdown('<div class="control-label">Datatype</div>', unsafe_allow_html=True)
+            datatype = st.radio(
+                "Datatype",
+                ["Effekt (kW)", "Energi (kWh)"],
+                horizontal=True,
+                label_visibility="collapsed",
+                key="datatype",
             )
 
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        with c2:
+            st.markdown('<div class="control-label">Periode</div>', unsafe_allow_html=True)
+            period = st.radio(
+                "Periode",
+                ["24t", "7d", "30d", "År"],
+                horizontal=True,
+                label_visibility="collapsed",
+                key="period",
+            )
+
+        # Plot
+        fig = go.Figure()
+
+        fig.add_trace(go.Scatter(
+            x=inverter_data.index,
+            y=inverter_data['power_kw'],
+            mode="lines",
+            name="Målt (SolarEdge)",
+            line=dict(width=2, color="orange"),
+            hovertemplate="%{x|%d.%m.%Y %H:%M}<br>Målt: %{y:.2f} kW<extra></extra>",
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=simulated_data.index,
+            y=simulated_data['power_kw'],
+            mode="lines",
+            name="Simulert (Digital Tvilling)",
+            line=dict(width=2, color="blue"),
+            hovertemplate="%{x|%d.%m.%Y %H:%M}<br>Simulert: %{y:.2f} kW<extra></extra>",
+        ))
+
+        fig.update_layout(
+            title=dict(
+                text="Faktisk vs Simulert Effektproduksjon",
+                font=dict(size=12, color="#d7d7db"),
+                x=0,
+                xanchor="left",
+            ),
+            height=300,
+            margin=dict(l=48, r=12, t=43, b=38),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#a5a6af", size=10),
+            hovermode="x unified",
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.03,
+                xanchor="right",
+                x=1,
+                font=dict(size=10),
+            ),
+            xaxis=dict(
+                showgrid=False,
+                zeroline=False,
+                tickfont=dict(size=9),
+                linecolor="#30313a",
+            ),
+            yaxis=dict(
+                title=dict(text="Effekt (kW)", font=dict(size=10)),
+                showgrid=True,
+                gridcolor="#282932",
+                zeroline=False,
+                tickfont=dict(size=9),
+                rangemode="tozero",
+            ),
+        )
+
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
     def _render_summary(self):
         # ------------------------------------------------------------

@@ -263,24 +263,24 @@ class UI:
     
     def _render_sidebar(self):
 
-        # ------------------------------------------------------------
-        # Sidebar
-        # ------------------------------------------------------------
+       
+        weather_data   = self.api.met.fetch()
+        weather_symbol = self._weather_code_to_text( weather_data['weather_code'] ) 
+        
+      
         with st.sidebar:
-            st.markdown('<div class="sidebar-title">Været nå (Gløshaugen)</div>',
-                        unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-title">Været nå (Gløshaugen)</div>', unsafe_allow_html=True)
 
-            st.markdown('<div class="sidebar-label">Tidspunkt: 07.09.2026 15:00</div>',
-                        unsafe_allow_html=True)
+            st.markdown(f'<div class="sidebar-label">Tidspunkt: {weather_data['forecast_time'] }</div>', unsafe_allow_html=True)
 
-            st.markdown("""
+            st.markdown(f"""
             <div class="sidebar-section">
-                <div style="font-size:13px;font-weight:650;margin:12px 0 18px 0;">
-                    ☁️ Overskyet
-                </div>
+                <div style="font-size:13px;font-weight:650;margin:12px 0 18px 0;">{weather_symbol}</div>
                 <div class="sidebar-label">Vind</div>
-                <div class="sidebar-value">1.1 m/s</div>
-                <div class="sidebar-source">MET.no - Frost API, stasjon Voll (vind)</div>
+                <div class="sidebar-value">{ weather_data['wind_speed'] } m/s</div>
+                <div class="sidebar-label">Temperatur</div>
+                <div class="sidebar-value">{ weather_data['air_temperature'] } °C</div>
+                <div class="sidebar-source">MET.no</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -290,17 +290,14 @@ class UI:
                     Sensormålinger (Taket)
                 </div>
                 <div class="sidebar-label">Tidspunkt: 21.05.2026 22:48:20</div>
-
                 <div style="margin-top:22px;">
                     <div class="sidebar-label">Pyranometer</div>
                     <div class="sidebar-value">0 W/m²</div>
                 </div>
-
                 <div style="margin-top:18px;">
-                    <div class="sidebar-label">Modultemperatur ⓘ</div>
+                    <div class="sidebar-label">Modultemperatur</div>
                     <div class="sidebar-value">12.3 °C</div>
                 </div>
-
                 <div style="margin-top:18px;">
                     <div class="sidebar-label">Omgivelsestemperatur</div>
                     <div class="sidebar-value">12.5 °C</div>
@@ -308,12 +305,8 @@ class UI:
             </div>
             """, unsafe_allow_html=True)
 
-            st.markdown('<div style="height:20px"></div>', unsafe_allow_html=True)
-            st.markdown('<div class="sidebar-title">Visning</div>',
-                        unsafe_allow_html=True)
+            
 
-            if st.button("Skjermmodus"):
-                st.session_state["dark_mode"] = not st.session_state.get("dark_mode", False)
 
     def _render_main(self):
 
@@ -371,7 +364,7 @@ class UI:
         with m4:
             st.markdown('<div class="metric-label">Avik energi</div>', unsafe_allow_html=True)
             st.markdown(f'<div class="metric-value">{inverter_energy_sum-simulated_energy_sum:.2f} kWh</div>', unsafe_allow_html=True)
-
+ 
         # with right:
         c1, c2 = st.columns([0.53, 0.47])
 
@@ -566,7 +559,7 @@ class UI:
                         unsafe_allow_html=True)
 
         with s4:
-            st.markdown('<div class="summary-label">Ytelsesratio ⓘ</div>',
+            st.markdown('<div class="summary-label">Ytelsesratio</div>',
                         unsafe_allow_html=True)
             st.markdown('<div class="summary-value">0.0 %</div>',
                         unsafe_allow_html=True)

@@ -79,10 +79,12 @@ class MET:
 
     def __init__(self):
         self.url     = f'https://api.met.no/weatherapi/locationforecast/2.0/compact?lat={round(SITE_LAT, 4)}&lon={round(SITE_LON, 4)}'
-        self.headers = {'User-Agent': ''}
+        self.headers = {"User-Agent": "BacheloroppgaveDigitalTvilling/1.0 (user@domain.com)"}
 
     def fetch(self):
-        return self._fetch_remote()
+        data = self._fetch_remote()
+        data = self._normalize(data)
+        return data
 
     def _normalize(self, data):
          #finne været 'akkurat nå'
@@ -467,7 +469,7 @@ class NordPool:
 
 class API:
     def __init__(self):
-        self.weather   = MET()
+        self.met       = MET()
         self.frost     = Frost()
         self.sensor    = Sensor()
         self.pvgis     = PVGIS()
@@ -480,40 +482,6 @@ class API:
 if __name__ == '__main__':
 
 
-    start_date = '2026-09-10'
-    end_date   = '2026-09-23'
-
-
-    solaredge = SolarEdge()
-    df       = solaredge.fetch('2026-09-10', '2026-09-23')
-    df       = solaredge.fetch('2026-09-11', '2026-09-22')
-    df       = solaredge.fetch('2026-09-15', '2026-09-24')
-
-    quit()
-
-    nordpool = NordPool()
-    df       = nordpool.fetch(start_date, end_date, 'NO3')
-
-
-
-    import matplotlib.pyplot as plt
-
-    plt.figure(figsize=(12, 5))
-
-    plt.plot(
-        df.index,
-        df['price_nok_kwh'],
-        linewidth=1.5,
-        drawstyle='steps-post'
-    )
-
-    plt.xlabel('Time')
-    plt.ylabel('Price [NOK/kWh]')
-    plt.title('Nord Pool NO3 Electricity Price')
-    plt.grid(True, alpha=0.3)
-
-    # plt.gca().xaxis.set_major_locator(mdates.DayLocator())
-    # plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%d.%m'))
- 
-    plt.tight_layout()
-    plt.show()
+    met = MET()
+    data = met.fetch()
+    print(data)

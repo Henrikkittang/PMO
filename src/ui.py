@@ -14,12 +14,12 @@ class UI:
         self.api   = API()
         self.model = DigitalTwin()
 
-        # self.start_date = '2026-09-10'
-        # self.end_date   = '2026-09-23'
-
         self.periods = ['24t', '7d', '30d', 'År']
+
         if 'period' not in st.session_state:
             st.session_state['period'] = '24t'
+        if 'datatype' not in st.session_state:
+            st.session_state['datatype'] = 'Effekt (kW)'
        
         st.set_page_config(
             page_title="Digital Tvilling: NTNU Gløshaugen",
@@ -385,7 +385,7 @@ class UI:
 
         with c1:
             st.markdown('<div class="control-label">Datatype</div>', unsafe_allow_html=True)
-            datatype = st.radio(
+            st.radio(
                 "Datatype",
                 ["Effekt (kW)", "Energi (kWh)"],
                 horizontal=True,
@@ -395,7 +395,7 @@ class UI:
 
         with c2:
             st.markdown('<div class="control-label">Periode</div>', unsafe_allow_html=True)
-            period = st.radio(
+            st.radio(
                 'Periode',
                 ['24t', '7d', '30d', 'År'],
                 horizontal=True,
@@ -403,146 +403,14 @@ class UI:
                 key='period',
             )
 
-        if datatype == 'Effekt (kW)':
-             
+        if st.session_state['datatype'] == 'Effekt (kW)':
+            self._render_power_graph(inverter_data, simulated_data)
 
-            # Plot
-            fig = go.Figure()
-
-            fig.add_trace(go.Scatter(
-                x=inverter_data.index,
-                y=inverter_data['power_kw'],
-                mode="lines",
-                name="Målt (SolarEdge)",
-                line=dict(width=2, color="orange"),
-                hovertemplate="%{x|%d.%m.%Y %H:%M}<br>Målt: %{y:.2f} kW<extra></extra>",
-            ))
-
-            fig.add_trace(go.Scatter(
-                x=simulated_data.index,
-                y=simulated_data['power_kw'],
-                mode="lines",
-                name="Simulert (Digital Tvilling)",
-                line=dict(width=2, color="blue"),
-                hovertemplate="%{x|%d.%m.%Y %H:%M}<br>Simulert: %{y:.2f} kW<extra></extra>",
-            ))
-
-            fig.update_layout(
-                title=dict(
-                    text="Faktisk vs Simulert Effektproduksjon",
-                    font=dict(size=12, color="#d7d7db"),
-                    x=0,
-                    xanchor="left",
-                ),
-                height=300,
-                margin=dict(l=48, r=12, t=43, b=38),
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(color="#a5a6af", size=10),
-                hovermode="x unified",
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.03,
-                    xanchor="right",
-                    x=1,
-                    font=dict(size=10),
-                ),
-                xaxis=dict(
-                    showgrid=False,
-                    zeroline=False,
-                    tickfont=dict(size=9),
-                    linecolor="#30313a",
-                ),
-                yaxis=dict(
-                    title=dict(text="Effekt (kW)", font=dict(size=10)),
-                    showgrid=True,
-                    gridcolor="#282932",
-                    zeroline=False,
-                    tickfont=dict(size=9),
-                    rangemode="tozero",
-                ),
-            )
-
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        
-        
-        elif datatype == 'Energi (kWh)':
-
-            fig = go.Figure()
-
-             # Plot
-            fig.add_trace(go.Bar(
-                x=inverter_data.index,
-                y=inverter_data["energy_kwh"],
-                name="Målt (SolarEdge)",
-                marker_color="orange",
-                opacity=0.6,
-                width=10 * 60 * 1000,  # 10 minutes in milliseconds
-                hovertemplate="%{x|%d.%m.%Y %H:%M}<br>Målt: %{y:.2f} kWh<extra></extra>",
-            ))
-
-            fig.add_trace(go.Bar(
-                x=simulated_data.index,
-                y=simulated_data["energy_kwh"],
-                name="Simulert (Digital Tvilling)",
-                marker_color="blue",
-                opacity=0.6,
-                width=10 * 60 * 1000,
-                hovertemplate="%{x|%d.%m.%Y %H:%M}<br>Simulert: %{y:.2f} kWh<extra></extra>",
-            ))
-
-            fig.update_layout(
-                barmode="overlay",
-                bargap=0.05,
-
-
-                title=dict(
-                    text="Faktisk vs Simulert Energiproduksjon",
-                    font=dict(size=12, color="#d7d7db"),
-                    x=0,
-                    xanchor="left",
-                ),
-                height=300,
-                margin=dict(l=48, r=12, t=43, b=38),
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(color="#a5a6af", size=10),
-                hovermode="x unified",
-
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.03,
-                    xanchor="right",
-                    x=1,
-                    font=dict(size=10),
-                ),
-
-                xaxis=dict(
-                    showgrid=False,
-                    zeroline=False,
-                    tickfont=dict(size=9),
-                    linecolor="#30313a",
-                ),
-
-                yaxis=dict(
-                    title=dict(text="Energi (kWh)", font=dict(size=10)),
-                    showgrid=True,
-                    gridcolor="#282932",
-                    zeroline=False,
-                    tickfont=dict(size=9),
-                    rangemode="tozero",
-                )
-            )
+        elif st.session_state['datatype'] == 'Energi (kWh)':
+            self._render_energy_graph(inverter_data, simulated_data)
             
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        
-
     def _render_summary(self):
-        # ------------------------------------------------------------
-        # Summary
-        # ------------------------------------------------------------
+      
         st.markdown(
             '<div style="height:1px;background:#30313a;margin:4px 0 0 0;"></div>',
             unsafe_allow_html=True
@@ -556,27 +424,152 @@ class UI:
         s1, s2, s3, s4 = st.columns(4)
 
         with s1:
-            st.markdown('<div class="summary-label">Totalt Målt Energi</div>',
-                        unsafe_allow_html=True)
-            st.markdown('<div class="summary-value">31.6 kWh</div>',
-                        unsafe_allow_html=True)
+            st.markdown('<div class="summary-label">Totalt Målt Energi</div>', unsafe_allow_html=True)
+            st.markdown('<div class="summary-value">31.6 kWh</div>', unsafe_allow_html=True)
 
         with s2:
-            st.markdown('<div class="summary-label">Totalt Simulert Energi</div>',
-                        unsafe_allow_html=True)
-            st.markdown('<div class="summary-value">0.0 kWh</div>',
-                        unsafe_allow_html=True)
+            st.markdown('<div class="summary-label">Totalt Simulert Energi</div>', unsafe_allow_html=True)
+            st.markdown('<div class="summary-value">0.0 kWh</div>', unsafe_allow_html=True)
 
         with s3:
-            st.markdown('<div class="summary-label">Avvik</div>',
-                        unsafe_allow_html=True)
-            st.markdown('<div class="summary-value">31.6 kWh</div>',
-                        unsafe_allow_html=True)
+            st.markdown('<div class="summary-label">Avvik</div>', unsafe_allow_html=True)
+            st.markdown('<div class="summary-value">31.6 kWh</div>', unsafe_allow_html=True)
 
         with s4:
-            st.markdown('<div class="summary-label">Ytelsesratio</div>',
-                        unsafe_allow_html=True)
-            st.markdown('<div class="summary-value">0.0 %</div>',
-                        unsafe_allow_html=True)
+            st.markdown('<div class="summary-label">Ytelsesratio</div>', unsafe_allow_html=True)
+            st.markdown('<div class="summary-value">0.0 %</div>', unsafe_allow_html=True)
 
         st.markdown('</div>', unsafe_allow_html=True)
+
+
+    def _render_power_graph(self, inverter_data, simulated_data):
+        # Plot
+        fig = go.Figure()
+
+        fig.add_trace(go.Scatter(
+            x=inverter_data.index,
+            y=inverter_data['power_kw'],
+            mode="lines",
+            name="Målt (SolarEdge)",
+            line=dict(width=2, color="orange"),
+            hovertemplate="%{x|%d.%m.%Y %H:%M}<br>Målt: %{y:.2f} kW<extra></extra>",
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=simulated_data.index,
+            y=simulated_data['power_kw'],
+            mode="lines",
+            name="Simulert (Digital Tvilling)",
+            line=dict(width=2, color="blue"),
+            hovertemplate="%{x|%d.%m.%Y %H:%M}<br>Simulert: %{y:.2f} kW<extra></extra>",
+        ))
+
+        fig.update_layout(
+            title=dict(
+                text="Faktisk vs Simulert Effektproduksjon",
+                font=dict(size=12, color="#d7d7db"),
+                x=0,
+                xanchor="left",
+            ),
+            height=300,
+            margin=dict(l=48, r=12, t=43, b=38),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#a5a6af", size=10),
+            hovermode="x unified",
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.03,
+                xanchor="right",
+                x=1,
+                font=dict(size=10),
+            ),
+            xaxis=dict(
+                showgrid=False,
+                zeroline=False,
+                tickfont=dict(size=9),
+                linecolor="#30313a",
+            ),
+            yaxis=dict(
+                title=dict(text="Effekt (kW)", font=dict(size=10)),
+                showgrid=True,
+                gridcolor="#282932",
+                zeroline=False,
+                tickfont=dict(size=9),
+                rangemode="tozero",
+            ),
+        )
+
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    
+    def _render_energy_graph(self, inverter_data, simulated_data):
+        fig = go.Figure()
+
+            # Plot
+        fig.add_trace(go.Bar(
+            x=inverter_data.index,
+            y=inverter_data["energy_kwh"],
+            name="Målt (SolarEdge)",
+            marker_color="orange",
+            opacity=0.6,
+            width=10 * 60 * 1000,  # 10 minutes in milliseconds
+            hovertemplate="%{x|%d.%m.%Y %H:%M}<br>Målt: %{y:.2f} kWh<extra></extra>",
+        ))
+
+        fig.add_trace(go.Bar(
+            x=simulated_data.index,
+            y=simulated_data["energy_kwh"],
+            name="Simulert (Digital Tvilling)",
+            marker_color="blue",
+            opacity=0.6,
+            width=10 * 60 * 1000,
+            hovertemplate="%{x|%d.%m.%Y %H:%M}<br>Simulert: %{y:.2f} kWh<extra></extra>",
+        ))
+
+        fig.update_layout(
+            barmode="overlay",
+            bargap=0.05,
+
+
+            title=dict(
+                text="Faktisk vs Simulert Energiproduksjon",
+                font=dict(size=12, color="#d7d7db"),
+                x=0,
+                xanchor="left",
+            ),
+            height=300,
+            margin=dict(l=48, r=12, t=43, b=38),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#a5a6af", size=10),
+            hovermode="x unified",
+
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.03,
+                xanchor="right",
+                x=1,
+                font=dict(size=10),
+            ),
+
+            xaxis=dict(
+                showgrid=False,
+                zeroline=False,
+                tickfont=dict(size=9),
+                linecolor="#30313a",
+            ),
+
+            yaxis=dict(
+                title=dict(text="Energi (kWh)", font=dict(size=10)),
+                showgrid=True,
+                gridcolor="#282932",
+                zeroline=False,
+                tickfont=dict(size=9),
+                rangemode="tozero",
+            )
+        )
+        
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    

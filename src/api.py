@@ -340,6 +340,7 @@ class Sensor:
 
 class SolarEdge:
     # Inverter data from elektrobygget
+    # ! The fetch should split the query into 14 days intervall, fetch in parallel and return the agrigate of the requests
 
     def __init__(self):
         self.url     = f'https://monitoringapi.solaredge.com/site/{env.SOLAREDGE_SITE}/power'

@@ -268,9 +268,10 @@ class UI:
         weather_data   = self.api.met.fetch()
         weather_symbol = self._weather_code_to_text( weather_data['weather_code'] ) 
 
-      
+        sensor_data = self.api.sensor.fetch()
+
         with st.sidebar:
-            st.markdown('<div class="sidebar-title">Været nå (Gløshaugen)</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-title">Været (Gløshaugen)</div>', unsafe_allow_html=True)
 
             st.markdown(f'<div class="sidebar-label">Tidspunkt: {weather_data['forecast_time'] }</div>', unsafe_allow_html=True)
 
@@ -285,23 +286,23 @@ class UI:
             </div>
             """, unsafe_allow_html=True)
 
-            st.markdown("""
+            st.markdown(f"""
             <div class="sidebar-section">
                 <div class="sidebar-title" style="margin-top:18px;">
                     Sensormålinger (Taket)
                 </div>
-                <div class="sidebar-label">Tidspunkt: -</div>
+                <div class="sidebar-label">Tidspunkt: {sensor_data.index[-1]} </div>
                 <div style="margin-top:22px;">
                     <div class="sidebar-label">Pyranometer</div>
-                    <div class="sidebar-value">- W/m²</div>
+                    <div class="sidebar-value">{sensor_data['GHI_avg'].iloc[-1]:.2f} W/m²</div>
                 </div>
                 <div style="margin-top:18px;">
                     <div class="sidebar-label">Modultemperatur</div>
-                    <div class="sidebar-value">- °C</div>
+                    <div class="sidebar-value">{sensor_data['CellTemp_avg'].iloc[-1]:.1f} °C</div>
                 </div>
                 <div style="margin-top:18px;">
                     <div class="sidebar-label">Omgivelsestemperatur</div>
-                    <div class="sidebar-value">- °C</div>
+                    <div class="sidebar-value">{sensor_data['AirTemp_avg'].iloc[-1]:.1f} °C</div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -356,7 +357,7 @@ class UI:
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown('<div class="section-title">Sanntidsdata</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">Tall for valgt periode</div>', unsafe_allow_html=True)
 
       
         m1, m2, m3, m4 = st.columns(4)

@@ -14,12 +14,12 @@ class UI:
         self.api   = API()
         self.model = DigitalTwin()
 
-        self.start_date = '2026-09-10'
-        self.end_date   = '2026-09-23'
-        
-        # ------------------------------------------------------------
-        # Page configuration
-        # ------------------------------------------------------------
+        # self.start_date = '2026-09-10'
+        # self.end_date   = '2026-09-23'
+
+        self.periods = ['24t', '7d', '30d', 'År']
+        st.session_state['period'] = '24t'
+       
         st.set_page_config(
             page_title="Digital Tvilling: NTNU Gløshaugen",
             page_icon="☁️",
@@ -305,13 +305,27 @@ class UI:
             </div>
             """, unsafe_allow_html=True)
 
-            
-
-
     def _render_main(self):
+    
+        now = datetime.now()
 
-        inverter_data = self.api.solaredge.fetch(self.start_date, self.end_date)
-        solar_data    = self.api.openmeteo.fetch(self.start_date, self.end_date)
+        end_date   = now 
+        if st.session_state['period'] == '24t':
+            start_date = end_date
+        elif st.session_state['period'] == '7d':
+            start_date = end_date - timedelta(days=7)
+        elif st.session_state['period'] == '30d':
+                    start_date = end_date - timedelta(days=30)
+        elif st.session_state['period'] == 'År':
+                    start_date = end_date - timedelta(days=365)
+
+
+        start_date = str(start_date.date())
+        end_date   = str(end_date.date())
+        
+            
+        inverter_data = self.api.solaredge.fetch(start_date, end_date)
+        solar_data    = self.api.openmeteo.fetch(start_date, end_date)
 
         simulated_data = self.model.calculate_power(solar_data)
 
@@ -387,6 +401,8 @@ class UI:
                 label_visibility="collapsed",
                 key="period",
             )
+
+        st.session_state['period'] = period
 
         if datatype == 'Effekt (kW)':
              

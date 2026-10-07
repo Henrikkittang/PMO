@@ -8,17 +8,33 @@ from api import API
 from ui import UI
 
 
+from datetime import datetime, timedelta
 
 
 if __name__ == '__main__':
 
     ui = UI()
     ui.render()
-        
     quit()
 
     api = API()
 
+    now = datetime.now()
+
+    end_date   = now 
+    start_date = end_date 
+
+    start_date = start_date.date()
+    end_date = end_date.date()
+
+    start_date = str(start_date)
+    end_date = str(end_date)
+
+    print(start_date)
+    print(end_date)
+
+    # quit()
+   
     # sensor_data = api.sensor.fetch()
     # start_date = sensor_data.index.min().strftime('%Y-%m-%d')
     # end_date = (sensor_data.index.max() + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
@@ -26,8 +42,8 @@ if __name__ == '__main__':
 
     # weather_data = api.weather.fetch()
 
-    start_date = '2026-09-10'
-    end_date   = '2026-09-23'
+    # start_date = '2026-09-10'
+    # end_date   = '2026-09-23'
 
     inverter_data = api.solaredge.fetch(start_date, end_date)
     solar_data    = api.openmeteo.fetch(start_date, end_date)
@@ -36,14 +52,8 @@ if __name__ == '__main__':
     # Digital twin
     model = DigitalTwin()
     model.build_model()
-    # simulated_data, _ = model.calculate_power(sensor_data)
     simulated_data = model.calculate_power(solar_data)
-    # simulated_data = simulated_data.resample('15min').interpolate(method='linear')
-
-    # ui = UI(weather_data, sensor_data, inverter_data, wind_data, simulated_data)
-    # ui.render()
-
-   
+  
     
     dt_hours = 15 / 60 # Resolution of 15 min -> kwh
     inverter_data['energy_kwh'] = ((inverter_data['power_kw'] + inverter_data['power_kw'].shift(1)) / 2 * dt_hours )

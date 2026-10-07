@@ -325,7 +325,10 @@ class UI:
         dt_hours = 15 / 60 # Resolution of 15 min -> kwh
         inverter_data['energy_kwh']  = ((inverter_data['power_kw'] + inverter_data['power_kw'].shift(1)) / 2 * dt_hours )
         simulated_data['energy_kwh'] = ((simulated_data['power_kw'] + simulated_data['power_kw'].shift(1)) / 2 * dt_hours )
-        
+
+        inverter_data  = inverter_data.fillna(0)
+        simulated_data = simulated_data.fillna(0)
+
 
         # ------------------------------------------------------------
         # Main content
@@ -353,21 +356,25 @@ class UI:
         # with left:
         m1, m2, m3, m4 = st.columns(4)
 
+        print(inverter_data['energy_kwh'])
+        inverter_energy_sum  = sum(inverter_data['energy_kwh'])
+        simulated_energy_sum = sum(simulated_data['energy_kwh'])
+
         with m1:
-            st.markdown('<div class="metric-label">Simulert effekt</div>', unsafe_allow_html=True)
-            st.markdown('<div class="metric-value">0.00 kW</div>', unsafe_allow_html=True)
+            st.markdown('<div class="metric-label">Målt energi</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-value">{inverter_energy_sum:.2f} kWh</div>', unsafe_allow_html=True)
 
         with m2:
-            st.markdown('<div class="metric-label">Målt effekt</div>', unsafe_allow_html=True)
-            st.markdown('<div class="metric-value">1.54 kW</div>', unsafe_allow_html=True)
+            st.markdown('<div class="metric-label">Simulert energi</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-value">{simulated_energy_sum:.2f} kWh</div>', unsafe_allow_html=True)
 
         with m3:
             st.markdown('<div class="metric-label">Ytelsesratio</div>', unsafe_allow_html=True)
-            st.markdown('<div class="metric-value">-</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-value">{inverter_energy_sum/simulated_energy_sum:.2f} </div>', unsafe_allow_html=True)
 
         with m4:
-            st.markdown('<div class="metric-label">Residual effekt</div>', unsafe_allow_html=True)
-            st.markdown('<div class="metric-value">-1.54 kW</div>', unsafe_allow_html=True)
+            st.markdown('<div class="metric-label">Avik energi</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-value">{inverter_energy_sum-simulated_energy_sum:.2f} kWh</div>', unsafe_allow_html=True)
 
         # with right:
         c1, c2 = st.columns([0.53, 0.47])

@@ -4,7 +4,12 @@ import pandas as pd
 import numpy as np
 import collections
 import io
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+
+import hashlib
+import json
+from pathlib import Path
 
 
 import env
@@ -12,6 +17,62 @@ import env
 SITE_TZ = 'Europe/Oslo'
 SITE_LAT = 63.4183333
 SITE_LON = 10.4008333
+
+
+class Cache:
+    def __init__(self, folderpath, normalize, fetch_remote):
+        self.folder       = Path(folderpath)
+        self.normalize    = normalize
+        self.fetch_remote = fetch_remote
+
+        self.seperator = '#'
+        self.folder.mkdir(parents=True, exist_ok=True)
+        
+
+    def fetch(self, request_start: str, request_end: str, params: dict):
+        param_hash = self._hash_dict(params)
+        filepath   = self.folder / param_hash
+
+        filepath.mkdir(parents=True, exist_ok=True)
+
+        time_ranges: list[str] = [f.stem for f in filepath.iterdir() if f.is_file()]
+
+        for time_range in time_ranges:
+            print(time_range)
+            cached_start, cached_end = self._parse_range(time_range)
+            a = self._in_range(datetime.fromisoformat(request_start), cached_start, cached_end)
+            b = self._in_range(datetime.fromisoformat(request_end), cached_start, cached_end)
+
+            if a and b:
+                pass # Sub range of cached data, return data
+            elif a or b:
+                pass # Partial overlap
+            else:
+                pass # No overlap, move to next
+
+            print(a, b)
+
+        # If no full or partial overlap is found, fetch from remote and cahce it
+
+        data = self.fetch_remote(params)
+        df   = self.normalize(data)
+
+        filepath = filepath / f'{request_start}{self.seperator}{request_end}.csv'
+        df.to_csv(filepath)
+
+        return df
+
+    def _parse_range(self, time_range):
+        start, end = time_range.split(self.seperator)
+        return datetime.fromisoformat(start), datetime.fromisoformat(end)
+
+    def _in_range(self, time, time_min, time_max):
+        return time >= time_min and time <= time_max
+
+    def _hash_dict(self, data: dict):
+        json_string = json.dumps(data, sort_keys=True).encode()
+        key = hashlib.sha256(json_string).hexdigest()
+        return key
 
 class MET:
     # Returns weather data
@@ -279,54 +340,22 @@ class SolarEdge:
     # Inverter data from elektrobygget
 
     def __init__(self):
-        self.api_key = env.SOLAREDGE_KEY
-        self.site_id = env.SOLAREDGE_SITE
-        self.url     = f'https://monitoringapi.solaredge.com/site/{self.site_id}/power'
-        self.filepath = './data/solaredge_master.csv'
+        self.url     = f'https://monitoringapi.solaredge.com/site/{env.SOLAREDGE_SITE}/power'
+        self.cache   = Cache('./api_cache/SolarEdge', self._normalize, self._fetch_remote)
 
 
     def fetch(self, start_date: str, end_date: str):
         ''' *start_date* and end_date can maximum be 14 days apart'''
 
-        data = self._fetch_remote(start_date, end_date)
-        df   = self._normalize(data)
-        return df
-        # df = pd.DataFrame()
+        start_time = start_date + ' 00:00:00'
+        end_time   = end_date   + ' 23:59:00'
+        params  = {'api_key': env.SOLAREDGE_KEY, 'startTime': start_time, 'endTime': end_time}
 
-
-        if df is None or df.empty:
-            return None
-
-        if os.path.exists(self.filepath):
-            #last inn eksisterende historikk
-            eksisterende_df = self._read_local(self.filepath)
-                
-            #fletter sammen
-            oppdatert_df = pd.concat([eksisterende_df, df])
-            
-            #fjerner duplikater/overlapp i nye/gamle verdier
-            oppdatert_df = oppdatert_df[~oppdatert_df.index.duplicated(keep='last')]
-            oppdatert_df.sort_index(inplace=True)
-        else:
-            oppdatert_df = df
         
-        #lagrer filen
-        oppdatert_df.to_csv(self.filepath)
-        return oppdatert_df
+        df = self.cache.fetch(start_date, end_date, params)
 
-
-    def _read_local(self, filepath: str) -> pd.DataFrame:
-        historikk_df = pd.read_csv(filepath, index_col=0, on_bad_lines='skip')
-        if historikk_df.empty:
-            return historikk_df
-
-        tidsindeks = pd.to_datetime(historikk_df.index, utc=True, errors='coerce')
-        gyldige_rader = tidsindeks.notna()
-        historikk_df = historikk_df.loc[gyldige_rader]
-        historikk_df.index = pd.DatetimeIndex(tidsindeks[gyldige_rader]).tz_convert(SITE_TZ)
-        historikk_df.sort_index(inplace=True)
-        return historikk_df
-
+        return df
+       
     def _normalize(self, data):
         df = pd.DataFrame(data['power']['values'])
         
@@ -341,15 +370,9 @@ class SolarEdge:
 
         return df
 
-    def _fetch_remote(self, start_date: str, end_date: str) -> pd.DataFrame | None:
+    def _fetch_remote(self, params: dict) -> pd.DataFrame | None:
         
-        start_time = start_date + ' 00:00:00'
-        end_time   = end_date + ' 23:59:00'
-        print(start_time, end_time)
-
-
-        params  = {'api_key': self.api_key, 'startTime': start_time, 'endTime': end_time}
-
+        
         try:
             response = requests.get(self.url, params=params, timeout=15)
             response.raise_for_status()
@@ -370,8 +393,7 @@ class SolarEdge:
 
 class NordPool:
     def __init__(self):
-        self.url = 'https://dataportal-api.nordpoolgroup.com/api/DayAheadPriceIndices'
-
+        self.url   = 'https://dataportal-api.nordpoolgroup.com/api/DayAheadPriceIndices'
 
     def fetch(self, start_date, end_date, price_zone):
 
@@ -458,7 +480,14 @@ if __name__ == '__main__':
 
     start_date = '2026-09-10'
     end_date   = '2026-09-23'
-    
+
+
+    solaredge = SolarEdge()
+    df       = solaredge.fetch('2026-09-10', '2026-09-23')
+    df       = solaredge.fetch('2026-09-11', '2026-09-22')
+    df       = solaredge.fetch('2026-09-15', '2026-09-24')
+
+    quit()
 
     nordpool = NordPool()
     df       = nordpool.fetch(start_date, end_date, 'NO3')

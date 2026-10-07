@@ -63,21 +63,10 @@ if __name__ == '__main__':
     )
 
 
-    ax1_price = ax1.twinx()
-    ax1_price.step(
-        nordpool_data.index,
-        nordpool_data['price_nok_kwh'],
-        where='post',
-        label='Nord Pool',
-        color='green',
-        linewidth=1.5,
-    )
-    ax1_price.set_ylabel('Electricity price (NOK/kWh)')
-
+   
     ax1.set_ylabel('Power (kW)')
     ax1.set_title('Power and energy production')
     ax1.legend()
-    ax1_price.legend()
     ax1.grid(True)
 
 
@@ -104,7 +93,6 @@ if __name__ == '__main__':
     ax2.grid(True)
     ax2.set_xlim(inverter_data.index.min(), inverter_data.index.max())
 
-    # Show every day
     ax2.xaxis.set_major_locator(mdates.DayLocator())
     ax2.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m'))
 

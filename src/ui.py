@@ -322,8 +322,8 @@ class UI:
                     start_date = end_date - timedelta(days=365)
 
 
-        start_date = str(start_date.date())
-        end_date   = str(end_date.date())
+        start_date = start_date.strftime("%Y-%m-%d")
+        end_date   = end_date.strftime("%Y-%m-%d")
         
             
         inverter_data = self.api.solaredge.fetch(start_date, end_date)

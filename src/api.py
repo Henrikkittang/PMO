@@ -5,7 +5,7 @@ import numpy as np
 import collections
 import io
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import hashlib
 import json
@@ -18,6 +18,19 @@ SITE_TZ = 'Europe/Oslo'
 SITE_LAT = 63.4183333
 SITE_LON = 10.4008333
 
+HTTP_ERRORS = {
+    400: "Bad Request — the request is invalid or malformed.",
+    401: "Unauthorized — authentication is missing or invalid.",
+    403: "Forbidden — authenticated, but not allowed to access the resource.",
+    404: "Not Found — the requested resource or endpoint does not exist.",
+    408: "Request Timeout — the server timed out waiting for the request.",
+    409: "Conflict — the request conflicts with the current state of the resource.",
+    429: "Too Many Requests — rate limit exceeded.",
+    500: "Internal Server Error — unexpected error on the server.",
+    502: "Bad Gateway — server received an invalid response from an upstream server.",
+    503: "Service Unavailable — server is temporarily unavailable or overloaded.",
+    504: "Gateway Timeout — upstream server did not respond in time.",
+}
 
 class Cache:
     def __init__(self, folderpath, normalize, fetch_remote):
@@ -340,7 +353,6 @@ class Sensor:
 
 class SolarEdge:
     # Inverter data from elektrobygget
-    # ! The fetch should split the query into 14 days intervall, fetch in parallel and return the agrigate of the requests
 
     def __init__(self):
         self.url     = f'https://monitoringapi.solaredge.com/site/{env.SOLAREDGE_SITE}/power'
@@ -348,22 +360,38 @@ class SolarEdge:
 
 
     def fetch(self, start_date: str, end_date: str):
-        ''' *start_date* and end_date can maximum be 14 days apart'''
+       
 
-        start_time = start_date + ' 00:00:00'
-        end_time   = end_date   + ' 23:59:00'
-        params  = {'api_key': env.SOLAREDGE_KEY, 'startTime': start_time, 'endTime': end_time}
+        time_ranges = self._split_range(datetime.fromisoformat(start_date), datetime.fromisoformat(end_date))
+        print(time_ranges)
 
-        data = self._fetch_remote(params)
-        df   = self._normalize(data)
+        # ? SolarEdge allows maximum 3 concurrect requests
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            results = executor.map(
+                lambda dates: self._fetch_remote(dates[0], dates[1]),
+                time_ranges
+            )
+
+        all_data = [data for data in results]
+        df   = self._normalize(all_data)
 
         # df = self.cache.fetch(start_date, end_date, params)
 
         return df
        
     def _normalize(self, data):
-        df = pd.DataFrame(data['power']['values'])
+
         
+
+        combined = [d['power']['values'] for d in data]
+
+
+        df = pd.DataFrame([item for sublist in combined for item in sublist])
+        
+        print('------------------------------------')
+        print(df)
+        print('------------------------------------')
+
         df['date'] = pd.to_datetime(df['date'])
         df.set_index('date', inplace=True)
         df.index = df.index.tz_localize(SITE_TZ, ambiguous='NaT', nonexistent='NaT')
@@ -375,14 +403,15 @@ class SolarEdge:
 
         return df
 
-    def _fetch_remote(self, params: dict) -> pd.DataFrame | None:
+    def _fetch_remote(self, start_time, end_time) -> pd.DataFrame | None:
         
-        
+        params  = {'api_key': env.SOLAREDGE_KEY, 'startTime': start_time, 'endTime': end_time}
+
         try:
             response = requests.get(self.url, params=params, timeout=15)
             response.raise_for_status()
         except Exception as e:
-            print(f'SolarEdge feil: {e}')
+            print(f'SolarEdge feil: {response.status_code} - {HTTP_ERRORS.get(response.status_code, '')}')
             return None
 
         data = response.json()
@@ -394,6 +423,23 @@ class SolarEdge:
             return None
         
         return data
+
+    def _split_range(self, start, end, days=14):
+        intervals = []
+        current = start.date() if hasattr(start, "date") else start
+        end = end.date() if hasattr(end, "date") else end
+
+        while current <= end:
+            interval_end = min(current + timedelta(days=days - 1), end)
+
+            intervals.append((
+                current.strftime("%Y-%m-%d") + " 00:00:00",
+                interval_end.strftime("%Y-%m-%d") + " 23:59:00"
+            ))
+
+            current = interval_end + timedelta(days=1)
+
+        return intervals
         
 
 class NordPool:
@@ -404,15 +450,12 @@ class NordPool:
 
 
         dates = pd.date_range(start_date, end_date, freq='D')
+        
 
         with ThreadPoolExecutor(max_workers=16) as executor:
 
             results = executor.map(
-                lambda date: self._fetch_remote(
-                    date.strftime('%Y-%m-%d'),
-                    price_zone
-                ),
-                dates
+                lambda date: self._fetch_remote(date.strftime('%Y-%m-%d'), price_zone), dates
             )
 
         all_data = []
@@ -482,7 +525,9 @@ class API:
 
 if __name__ == '__main__':
 
+    start_date = '2026-10-09'
+    end_date   = '2026-10-09'
+    
 
-    met = MET()
-    data = met.fetch()
-    print(data)
+    solaredge = SolarEdge()
+    solaredge.fetch(start_date, end_date)

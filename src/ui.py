@@ -14,8 +14,6 @@ class UI:
         self.api   = API()
         self.model = DigitalTwin()
 
-        self.periods = ['24t', '7d', '30d', 'År']
-
         if 'period' not in st.session_state:
             st.session_state['period'] = '24t'
         if 'datatype' not in st.session_state:
@@ -318,10 +316,7 @@ class UI:
             start_date = end_date - timedelta(days=7)
         elif st.session_state['period'] == '30d':
                     start_date = end_date - timedelta(days=30)
-        elif st.session_state['period'] == 'År':
-                    start_date = end_date - timedelta(days=365)
-
-
+       
         start_date = start_date.strftime("%Y-%m-%d")
         end_date   = end_date.strftime("%Y-%m-%d")
         
@@ -398,7 +393,7 @@ class UI:
             st.markdown('<div class="control-label">Periode</div>', unsafe_allow_html=True)
             st.radio(
                 'Periode',
-                ['24t', '7d', '30d', 'År'],
+                ['24t', '7d', '30d'],
                 horizontal=True,
                 label_visibility="collapsed",
                 key='period',

@@ -365,7 +365,7 @@ class SolarEdge:
         time_ranges = self._split_range(datetime.fromisoformat(start_date), datetime.fromisoformat(end_date))
         print(time_ranges)
 
-        # ? SolarEdge allows maximum 3 concurrect requests
+        # ! SolarEdge allows maximum 3 concurrect requests
         with ThreadPoolExecutor(max_workers=3) as executor:
             results = executor.map(
                 lambda dates: self._fetch_remote(dates[0], dates[1]),
@@ -388,10 +388,6 @@ class SolarEdge:
 
         df = pd.DataFrame([item for sublist in combined for item in sublist])
         
-        print('------------------------------------')
-        print(df)
-        print('------------------------------------')
-
         df['date'] = pd.to_datetime(df['date'])
         df.set_index('date', inplace=True)
         df.index = df.index.tz_localize(SITE_TZ, ambiguous='NaT', nonexistent='NaT')

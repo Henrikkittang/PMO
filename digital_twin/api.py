@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 
 
-import env
+from . import env
 
 SITE_TZ = 'Europe/Oslo'
 SITE_LAT = 63.4183333

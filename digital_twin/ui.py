@@ -5,8 +5,8 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 
-from api import API
-from model import DigitalTwin
+from .api import API
+from .model import DigitalTwin
 
 class UI:
 

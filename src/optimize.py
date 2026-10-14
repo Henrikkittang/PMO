@@ -7,7 +7,13 @@ import matplotlib.pyplot as plt
 # Python Variables
 #######################
 
+
+P_max = 10
+battery_E_max = 20
+battery_E_0 = 0
+
 dt = 0.25
+
 
 df_price = pd.read_csv('./data/price.csv')
 df_power = pd.read_csv('./data/power.csv')
@@ -25,10 +31,10 @@ print(df_power['power_kw'])
 model = pyo.ConcreteModel()
 
 # Time Steps
-model.T = pyo.RangeSet(0, 24*4-1) # 96 [15 min]
+model.T = pyo.RangeSet(0, 95) # 96 [15 min]
 
-# Time steps minus last step
-model.T_battery = pyo.RangeSet(model.T.first(), model.T.last() - 1)
+# Extra time step for energy integral
+model.T_battery = pyo.RangeSet(0, 96)
 
 
 
@@ -37,29 +43,28 @@ model.T_battery = pyo.RangeSet(model.T.first(), model.T.last() - 1)
 #######################
 
 # Battery energy level 
-model.battery_E = pyo.Var(model.T, initialize=0, bounds=(0, 20), within=pyo.NonNegativeReals) # kWh
-model.battery_E[0] = 10
+model.battery_E = pyo.Var(model.T_battery, initialize=battery_E_0, bounds=(0, battery_E_max), within=pyo.NonNegativeReals) # kWh
 
 # Power in/out of battery
-model.battery_P = pyo.Var(model.T, initialize=0, bounds=(-10, 10)) # kW
+model.battery_charge_P    = pyo.Var(model.T, initialize=0, bounds=(0, P_max)) # kW
+model.battery_discharge_P = pyo.Var(model.T, initialize=0, bounds=(0, P_max)) # kW
 
-# Binary variable for charging
 model.is_charging = pyo.Var(model.T, initialize=0, domain=pyo.Binary) # 0|1
 
 # Power in/out of grid
-model.grid_P = pyo.Var(model.T, initialize=0) # kW
-
+model.grid_import_P = pyo.Var(model.T, initialize=0, bounds=(0, P_max)) # kW
+model.grid_export_P = pyo.Var(model.T, initialize=0, bounds=(0, P_max)) # kW
 
 #######################
 # Constant Parameteres
 #######################
 
 
-# Oower production of solar panels
-model.spot_price    = pyo.Param(model.T, initialize=dict(enumerate(df_price['price_nok_kwh'])), within=pyo.NonNegativeReals)
-
 # Price of electricy
-model.PV_P_prod = pyo.Param(model.T, initialize=dict(enumerate(df_power['power_kw']))) # NOK/kWh
+model.spot_price    = pyo.Param(model.T, initialize=dict(enumerate(df_price['price_nok_kwh'])))
+
+# Oower production of solar panels
+model.PV_P_prod = pyo.Param(model.T, initialize=dict(enumerate(df_power['power_kw'])), within=pyo.NonNegativeReals) # NOK/kWh
 
 model.bat_cycle_cost = pyo.Param(initialize=0)    # NOK/kWh
 model.bat_charge_eff = pyo.Param(initialize=0.95) # %
@@ -71,27 +76,33 @@ model.bat_charge_eff = pyo.Param(initialize=0.95) # %
 # Constraints
 #######################
 
+model.initial_battery_constraint = pyo.Constraint(
+    expr=model.battery_E[0] == battery_E_0
+)
+
 # Energy production cannot be created from nothing or come from nothing
 def energy_balance_constraint(model, t):
-    return (model.PV_P_prod[t] - model.battery_P[t] - model.grid_P[t]) == 0
+    return (model.PV_P_prod[t] + model.grid_import_P[t] + model.battery_discharge_P[t]) == (model.battery_charge_P[t] + model.grid_export_P[t])
 model.energy_balance = pyo.Constraint(model.T, rule=energy_balance_constraint)
 
 
-# Positive power (charging) only if is_charging = 1
+# Charging constraint
 def charge_constraint(model, t):
-    return model.battery_P[t] <= model.battery_P[t].ub * model.is_charging[t]
+    return model.battery_charge_P[t] <= P_max * model.is_charging[t]
 model.charge_limit = pyo.Constraint(model.T, rule=charge_constraint)
 
-# Negative power (discharging) only if is_charging = 0
 def discharge_constraint(model, t):
-    return model.battery_P[t] >= model.battery_P[t].lb * (1 - model.is_charging[t])
+    return model.battery_discharge_P[t] <= P_max* (1 - model.is_charging[t])
 model.discharge_limit = pyo.Constraint(model.T, rule=discharge_constraint)
 
 
-# Battery capacity cannot be discharged below 0 or over E_max
+
+# Battery capacity constraint
 def battery_capacity_constraint(model, t):
-    return model.battery_E[t + 1]  == model.battery_E[t] + model.battery_P[t] * dt
-model.battery_energy_balance = pyo.Constraint(model.T_battery, rule=battery_capacity_constraint)
+    return model.battery_E[t + 1] == model.battery_E[t] + model.battery_charge_P[t]*dt - model.battery_discharge_P[t]*dt
+model.battery_energy_balance = pyo.Constraint(model.T, rule=battery_capacity_constraint)
+
+
 
 
 
@@ -101,7 +112,7 @@ model.battery_energy_balance = pyo.Constraint(model.T_battery, rule=battery_capa
 #######################
 
 def objective_rule(model):
-    return sum( model.spot_price[t]*( model.grid_P[t] )*dt for t in model.T )
+    return sum( model.spot_price[t]*( (model.grid_export_P[t] - model.grid_import_P[t]) )*dt for t in model.T )
 model.objective = pyo.Objective(rule=objective_rule, sense=pyo.maximize)
 
 
@@ -123,8 +134,8 @@ if results.solver.termination_condition == pyo.TerminationCondition.optimal:
         print(
             f't={t:2d} | '
             f'Battery E={pyo.value(model.battery_E[t]):6.2f} kWh | '
-            f'Battery P={pyo.value(model.battery_P[t]):6.2f} kW | '
-            f'Grid P={pyo.value(model.grid_P[t]):6.2f} kW'
+            f'Battery P={pyo.value(model.battery_charge_P[t]) + pyo.value(model.battery_discharge_P[t]):6.2f} kW | '
+            f'Grid P={pyo.value(model.grid_import_P[t]) + pyo.value(model.grid_export_P[t]):6.2f} kW'
         )
 else:
     print('Solver status:', results.solver.status)
@@ -132,24 +143,50 @@ else:
 
 
 
+#######################
+# Data
+#######################
 
+price = [pyo.value(model.spot_price[t]) for t in model.T]
+
+battery_E = [pyo.value(model.battery_E[t]) for t in model.T]
+battery_P = [pyo.value(model.battery_charge_P[t])- pyo.value(model.battery_discharge_P[t]) for t in model.T]
+grid_P = [pyo.value(model.grid_import_P[t]) - pyo.value(model.grid_export_P[t]) for t in model.T ]
+pv_P = [pyo.value(model.PV_P_prod[t]) for t in model.T]
 
 #######################
 # Plot
 #######################
 
-battery_E = [pyo.value(model.battery_E[t]) for t in model.T]
-battery_P = [pyo.value(model.battery_P[t]) for t in model.T]
-grid_P    = [pyo.value(model.grid_P[t]) for t in model.T]
-pv_P      = [pyo.value(model.PV_P_prod[t]) for t in model.T]
+fig, axes = plt.subplots(2, 2, figsize=(15, 9), sharex=True)
 
+plots = [
+    (axes[0, 0], battery_E, "Battery Energy", "Energy [kWh]"),
+    (axes[0, 1], battery_P, "Battery Power", "Power [kW]"),
+    (axes[1, 0], grid_P, "Grid Power", "Power [kW]"),
+    (axes[1, 1], pv_P, "PV Production", "Power [kW]"),
+]
 
-plt.plot(battery_E, label='Battery E')
-plt.plot(battery_P, label='Battery P')
-plt.plot(grid_P, label='Grid P')
-plt.plot(pv_P, label='PV P')
+for ax, data, title, ylabel in plots:
+    # Primary axis
+    ax.plot(data, label=title, color="tab:blue")
+    ax.set_title(title)
+    ax.set_ylabel(ylabel)
+    ax.grid(True, alpha=0.3)
 
+    # Secondary axis: electricity price
+    ax2 = ax.twinx()
+    ax2.plot(price, label="Spot Price", color="tab:orange", linestyle="--")
+    ax2.set_ylabel("Price [NOK/kWh]", color="tab:orange")
+    ax2.tick_params(axis="y", labelcolor="tab:orange")
 
-plt.legend()
-plt.grid()
+    # Combined legend
+    lines1, labels1 = ax.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax.legend(lines1 + lines2, labels1 + labels2, loc="best")
+
+axes[1, 0].set_xlabel("Time step [15 min]")
+axes[1, 1].set_xlabel("Time step [15 min]")
+
+fig.tight_layout()
 plt.show()

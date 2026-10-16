@@ -8,19 +8,17 @@ import matplotlib.pyplot as plt
 #######################
 
 
-P_max = 10
-battery_E_max = 20
-battery_E_0 = 0 
+P_max            = 5    # kW
+battery_E_max    = 20   # kWh
+battery_E_0      = 0    # kWh
+battery_eff      = 0.95 # %
+battery_cyc_cost = 1.5  # NOK/kWh
 
 dt = 0.25
 
 
 df_price = pd.read_csv('./data/price.csv')
 df_power = pd.read_csv('./data/power.csv')
-
-if len(df_price['price_nok_kwh']) != len(df_power['power_kw']):
-    print('Mismatch in data length for price and power')
-    quit()
 
 #######################
 # Setup
@@ -99,7 +97,7 @@ model.discharge_limit = pyo.Constraint(model.T, rule=discharge_constraint)
 
 # Battery capacity constraint
 def battery_capacity_constraint(model, t):
-    return model.battery_E[t + 1] == model.battery_E[t] + model.battery_charge_P[t]*dt - model.battery_discharge_P[t]*dt
+    return model.battery_E[t + 1] == model.battery_E[t] + battery_eff*model.battery_charge_P[t]*dt - (1/battery_eff)*model.battery_discharge_P[t]*dt
 model.battery_energy_balance = pyo.Constraint(model.T, rule=battery_capacity_constraint)
 
 
@@ -109,7 +107,7 @@ model.battery_energy_balance = pyo.Constraint(model.T, rule=battery_capacity_con
 
 # Maximize the revenue from selling energy
 def objective_rule(model):
-    return sum( model.spot_price[t]*( (model.grid_export_P[t] - model.grid_import_P[t]) )*dt for t in model.T )
+    return dt*sum( model.spot_price[t]*( (model.grid_export_P[t])) - model.grid_import_P[t]*0.5 - battery_cyc_cost*(model.battery_charge_P[t] - model.battery_discharge_P[t]) for t in model.T )
 model.objective = pyo.Objective(rule=objective_rule, sense=pyo.maximize)
 
 

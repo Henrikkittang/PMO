@@ -26,7 +26,7 @@ if __name__ == '__main__':
     print(df.index.max())
     print(df.index.tz)
 
-    plt.plot(df.index, df['price_nok_kwh'])
+    plt.step(df.index, df['price_nok_kwh'], where='post')
 
     ax = plt.gca()
     ax.set_xlim(df.index.min(), df.index.max())

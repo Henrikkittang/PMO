@@ -20,8 +20,8 @@ SITE_TZ = 'Europe/Oslo'
 if __name__ == '__main__':
     api = API()
 
-    start_date = '2026-09-14'
-    end_date   = '2026-09-14'
+    start_date = '2026-09-10'
+    end_date   = '2026-09-20'
 
     # Fetch data
     inverter_data = api.solaredge.fetch(start_date, end_date)
@@ -107,8 +107,8 @@ if __name__ == '__main__':
         inverter_data.index.max(),
     )
 
-    ax2.xaxis.set_major_locator(mdates.HourLocator(interval=1, tz=SITE_TZ))
-    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M', tz=SITE_TZ))
+    ax2.xaxis.set_major_locator(mdates.DayLocator(interval=1, tz=SITE_TZ))
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m', tz=SITE_TZ))
 
     plt.xticks(rotation=45)
     plt.tight_layout()

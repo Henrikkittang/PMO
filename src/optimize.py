@@ -20,6 +20,7 @@ dt = 0.25
 df_price = pd.read_csv('./data/price.csv')
 df_power = pd.read_csv('./data/power.csv')
 
+
 #######################
 # Setup
 #######################

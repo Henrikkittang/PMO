@@ -24,19 +24,19 @@ df_power_s2.loc[:47, 'power_kw'] = df_power_s3['power_kw'].iloc[:48]
 
 power_dfs = {'s1': df_power_s1, 's2': df_power_s2, 's3': df_power_s3}
 
-xs = range(len(df_power_s1))
-
-# Original power
-plt.plot(xs, df_power_s1['power_kw'], label='S1', linewidth=2)
-plt.plot(xs, df_power_s2['power_kw'], label='S2', linewidth=2)
-plt.plot(xs, df_power_s3['power_kw'], label='S3', linewidth=2)
-
-plt.xlabel('Timestep')
-plt.ylabel('Power (kW)')
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.show()
+# xs = range(len(df_power_s1))
+# 
+# # Original power
+# plt.plot(xs, df_power_s1['power_kw'], label='S1', linewidth=2)
+# plt.plot(xs, df_power_s2['power_kw'], label='S2', linewidth=2)
+# plt.plot(xs, df_power_s3['power_kw'], label='S3', linewidth=2)
+# 
+# plt.xlabel('Timestep')
+# plt.ylabel('Power (kW)')
+# plt.legend()
+# plt.grid(True)
+# plt.tight_layout()
+# plt.show()
 
  
 model = pyo.ConcreteModel()
@@ -51,7 +51,7 @@ model.battery_E_max = pyo.Param(initialize=20)    # kWh
 model.battery_E_0 = pyo.Param(initialize=0)       # kWh
 
 model.battery_eff =  pyo.Param(initialize=0.95)
-model.bat_cycle_cost = pyo.Param(initialize=0.3)  # NOK/kWh throughput
+model.bat_cycle_cost = pyo.Param(initialize=0.33)  # NOK/kWh throughput
 model.dt = pyo.Param(initialize=0.25)             # hours
 
 # Scenarios and probabilities
@@ -89,10 +89,10 @@ model.P_PV_EV  = pyo.Param(model.T, initialize=lambda model, t: sum(model.pi[s] 
 model.E_PV_EV  = pyo.Param(initialize=sum(model.pi[s] * model.PV_P_prod[s, t] * model.dt for t in model.T for s in model.S))
 model.price_EV = pyo.Param(initialize=sum(model.pi[s] * model.spot_price[t] * model.PV_P_prod[s, t] * model.dt for t in model.T for s in model.S))
 
-for t in model.T:
-    print(f't={t}: {pyo.value(model.P_PV_EV[t]):.3f} kW')
-print(f'Energy PV {pyo.value(model.E_PV_EV):.2f} kWh')
-print(f'Price {pyo.value(model.price_EV):.2f} kr')
+print('---------------------------')
+print(f'Exptected Energy PV {pyo.value(model.E_PV_EV):.2f} kWh')
+print(f'Exptected Price {pyo.value(model.price_EV):.2f} kr')
+print('---------------------------')
 
 
 #######################
@@ -103,33 +103,33 @@ print(f'Price {pyo.value(model.price_EV):.2f} kr')
 
 
 # Battery energy level 
-model.battery_E_FS = pyo.Var(model.T_battery_FS, bounds=(0, model.battery_E_max), domain=pyo.NonNegativeReals) # kWh
+model.battery_E_FS = pyo.Var(model.T_battery_FS, initialize=0, bounds=(0, model.battery_E_max), domain=pyo.Reals) # kWh
 
 # Power in/out of battery
-model.battery_charge_P_FS    = pyo.Var(model.T_FS, initialize=0, bounds=(0, model.P_max), domain=pyo.NonNegativeReals) # kW
-model.battery_discharge_P_FS = pyo.Var(model.T_FS, initialize=0, bounds=(0, model.P_max), domain=pyo.NonNegativeReals) # kW
+model.battery_charge_P_FS    = pyo.Var(model.T_FS, initialize=0, bounds=(0, model.P_max), domain=pyo.Reals) # kW
+model.battery_discharge_P_FS = pyo.Var(model.T_FS, initialize=0, bounds=(0, model.P_max), domain=pyo.Reals) # kW
 
 model.is_charging_FS = pyo.Var(model.T_FS, initialize=0, domain=pyo.Binary) # 0|1
 
 # Power in/out of grid
-model.grid_import_P_FS = pyo.Var(model.T_FS, initialize=0, bounds=(0, model.P_max), domain=pyo.NonNegativeReals) # kW
-model.grid_export_P_FS = pyo.Var(model.T_FS, initialize=0, bounds=(0, None),        domain=pyo.NonNegativeReals) # kW
+model.grid_import_P_FS = pyo.Var(model.T_FS, initialize=0, bounds=(0, model.P_max), domain=pyo.Reals) # kW
+model.grid_export_P_FS = pyo.Var(model.T_FS, initialize=0, bounds=(0, 5.375),        domain=pyo.Reals) # kW
 
 
 # ---- Second stage  ---- Defined over second half of T and S
 
 # Battery energy level 
-model.battery_E_SS = pyo.Var(model.S, model.T_battery_SS, bounds=(0, model.battery_E_max), domain=pyo.NonNegativeReals) # kWh
+model.battery_E_SS = pyo.Var(model.S, model.T_battery_SS, initialize=0, bounds=(0, model.battery_E_max), domain=pyo.Reals) # kWh
 
 # Power in/out of battery
-model.battery_charge_P_SS    = pyo.Var(model.S, model.T_SS, initialize=0, bounds=(0, model.P_max), domain=pyo.NonNegativeReals) # kW
-model.battery_discharge_P_SS = pyo.Var(model.S, model.T_SS, initialize=0, bounds=(0, model.P_max), domain=pyo.NonNegativeReals) # kW
+model.battery_charge_P_SS    = pyo.Var(model.S, model.T_SS, initialize=0, bounds=(0, model.P_max), domain=pyo.Reals) # kW
+model.battery_discharge_P_SS = pyo.Var(model.S, model.T_SS, initialize=0, bounds=(0, model.P_max), domain=pyo.Reals) # kW
 
 model.is_charging_SS = pyo.Var(model.S, model.T_SS, initialize=0, domain=pyo.Binary) # 0|1
 
 # Power in/out of grid
-model.grid_import_P_SS = pyo.Var(model.S, model.T_SS, initialize=0, bounds=(0, model.P_max), domain=pyo.NonNegativeReals) # kW
-model.grid_export_P_SS = pyo.Var(model.S, model.T_SS, initialize=0, bounds=(0, None),        domain=pyo.NonNegativeReals) # kW
+model.grid_import_P_SS = pyo.Var(model.S, model.T_SS, initialize=0, bounds=(0, model.P_max), domain=pyo.Reals) # kW
+model.grid_export_P_SS = pyo.Var(model.S, model.T_SS, initialize=0, bounds=(0, 5.375),        domain=pyo.Reals) # kW
 
 
 
@@ -164,6 +164,7 @@ model.discharge_limit_fs = pyo.Constraint(model.T_FS, rule=discharge_constraint_
 def battery_capacity_constraint_fs(model, t):
     return model.battery_E_FS[t + 1] == model.battery_E_FS[t] + model.battery_eff*model.battery_charge_P_FS[t]*model.dt - (1/model.battery_eff)*model.battery_discharge_P_FS[t]*model.dt
 model.battery_energy_balance_fs = pyo.Constraint(model.T_FS, rule=battery_capacity_constraint_fs)
+
 
 
 
@@ -205,7 +206,7 @@ model.battery_energy_link = pyo.Constraint(model.S, rule=battery_energy_link_con
 #######################
 model.FirstStageCost = pyo.Expression(
     expr=model.dt * sum(
-        model.spot_price[t] * model.grid_export_P_FS[t] - 0.5*model.grid_import_P_FS[t]
+        model.spot_price[t] * (model.grid_export_P_FS[t] - model.grid_import_P_FS[t])
         - model.bat_cycle_cost * model.battery_charge_P_FS[t]
         for t in model.T_FS
     )
@@ -214,7 +215,7 @@ model.FirstStageCost = pyo.Expression(
 model.SecondStageCost = pyo.Expression(
     expr=sum(
         model.pi[s] * model.dt * sum(
-            model.spot_price[t] * model.grid_export_P_SS[s, t] - 0.5*model.grid_import_P_SS[s, t]
+            model.spot_price[t] * (model.grid_export_P_SS[s, t] - model.grid_import_P_SS[s, t])
             - model.bat_cycle_cost * model.battery_charge_P_SS[s, t]
             for t in model.T_SS
         )
@@ -233,7 +234,7 @@ model.objective = pyo.Objective(
 
 solver = SolverFactory('glpk')
 
-results = solver.solve(model, tee=True)
+results = solver.solve(model, tee=False)
 
 # if results.solver.termination_condition == pyo.TerminationCondition.optimal:
 #     print('Optimal solution found!')

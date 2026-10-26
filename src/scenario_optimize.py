@@ -24,20 +24,28 @@ df_power_s2.loc[:47, 'power_kw'] = df_power_s3['power_kw'].iloc[:48]
 
 power_dfs = {'s1': df_power_s1, 's2': df_power_s2, 's3': df_power_s3}
 
+
 # xs = range(len(df_power_s1))
 # 
-# # Original power
-# plt.plot(xs, df_power_s1['power_kw'], label='S1', linewidth=2)
-# plt.plot(xs, df_power_s2['power_kw'], label='S2', linewidth=2)
-# plt.plot(xs, df_power_s3['power_kw'], label='S3', linewidth=2)
+# fig, ax = plt.subplots()
 # 
-# plt.xlabel('Timestep')
+# # Original power
+# ax.plot(xs, df_power_s1['power_kw'], label='Scenario 1', linewidth=2)
+# ax.plot(xs, df_power_s2['power_kw'], label='Scenario 2', linewidth=2)
+# ax.plot(xs, df_power_s3['power_kw'], label='Scenario 3', linewidth=2)
+# ax.axvline(x=47, color='black', linestyle='--', linewidth=1.5)
+# ax.plot(xs[:48], df_power_s1['power_kw'][:48], label='Shared production', linewidth=2, color='black')
+# 
+# plt.xlim(xs[0], xs[-1])
+# plt.xlabel('Timesteps [15 min]')
 # plt.ylabel('Power (kW)')
+# plt.title('PV production scenarios')
 # plt.legend()
 # plt.grid(True)
 # plt.tight_layout()
 # plt.show()
-
+# 
+# quit()
  
 model = pyo.ConcreteModel()
 
@@ -47,6 +55,7 @@ model = pyo.ConcreteModel()
 #######################
 
 model.P_max = pyo.Param(initialize=5)             # kW
+model.P_line_max = pyo.Param(initialize=5.375)             # kW
 model.battery_E_max = pyo.Param(initialize=20)    # kWh
 model.battery_E_0 = pyo.Param(initialize=0)       # kWh
 
@@ -112,8 +121,9 @@ model.battery_discharge_P_FS = pyo.Var(model.T_FS, initialize=0, bounds=(0, mode
 model.is_charging_FS = pyo.Var(model.T_FS, initialize=0, domain=pyo.Binary) # 0|1
 
 # Power in/out of grid
-model.grid_import_P_FS = pyo.Var(model.T_FS, initialize=0, bounds=(0, model.P_max), domain=pyo.Reals) # kW
-model.grid_export_P_FS = pyo.Var(model.T_FS, initialize=0, bounds=(0, 5.375),        domain=pyo.Reals) # kW
+model.grid_import_P_FS = pyo.Var(model.T_FS, initialize=0, bounds=(0, None), domain=pyo.Reals) # kW
+model.grid_export_P_FS = pyo.Var(model.T_FS, initialize=0, bounds=(0, None), domain=pyo.Reals) # kW
+model.is_importing_FS  = pyo.Var(model.T_FS, initialize=0, domain=pyo.Binary) # 0|1
 
 
 # ---- Second stage  ---- Defined over second half of T and S
@@ -124,12 +134,12 @@ model.battery_E_SS = pyo.Var(model.S, model.T_battery_SS, initialize=0, bounds=(
 # Power in/out of battery
 model.battery_charge_P_SS    = pyo.Var(model.S, model.T_SS, initialize=0, bounds=(0, model.P_max), domain=pyo.Reals) # kW
 model.battery_discharge_P_SS = pyo.Var(model.S, model.T_SS, initialize=0, bounds=(0, model.P_max), domain=pyo.Reals) # kW
-
 model.is_charging_SS = pyo.Var(model.S, model.T_SS, initialize=0, domain=pyo.Binary) # 0|1
 
 # Power in/out of grid
-model.grid_import_P_SS = pyo.Var(model.S, model.T_SS, initialize=0, bounds=(0, model.P_max), domain=pyo.Reals) # kW
-model.grid_export_P_SS = pyo.Var(model.S, model.T_SS, initialize=0, bounds=(0, 5.375),        domain=pyo.Reals) # kW
+model.grid_import_P_SS = pyo.Var(model.S, model.T_SS, initialize=0, bounds=(0, None), domain=pyo.Reals) # kW
+model.grid_export_P_SS = pyo.Var(model.S, model.T_SS, initialize=0, bounds=(0, None), domain=pyo.Reals) # kW
+model.is_importing_SS  = pyo.Var(model.S, model.T_SS, initialize=0, domain=pyo.Binary) # 0|1
 
 
 
@@ -166,6 +176,16 @@ def battery_capacity_constraint_fs(model, t):
 model.battery_energy_balance_fs = pyo.Constraint(model.T_FS, rule=battery_capacity_constraint_fs)
 
 
+# Import/export constraint
+def import_constraint_fs(model, t):
+    return model.grid_import_P_FS[t] <= model.P_line_max* model.is_importing_FS[t]
+model.import_limit_fs = pyo.Constraint(model.T_FS, rule=import_constraint_fs)
+
+def export_constraint_fs(model, t):
+    return model.grid_export_P_FS[t] <= model.P_line_max* model.is_importing_FS[t]
+model.export_limit_fs = pyo.Constraint(model.T_FS, rule=export_constraint_fs)
+
+
 
 
 #  ---- Second stage ----
@@ -191,6 +211,16 @@ def battery_capacity_constraint_ss(model, s, t):
     return model.battery_E_SS[s, t + 1] == model.battery_E_SS[s, t] + model.battery_eff*model.battery_charge_P_SS[s, t]*model.dt - (1/model.battery_eff)*model.battery_discharge_P_SS[s, t]*model.dt
 model.battery_energy_balance_ss = pyo.Constraint(model.S, model.T_SS, rule=battery_capacity_constraint_ss)
 
+
+
+# Import/export constraint
+def import_constraint_ss(model, s, t):
+    return model.grid_import_P_SS[s, t] <= model.P_line_max * model.is_importing_SS[s, t]
+model.import_limit_ss = pyo.Constraint(model.S, model.T_SS, rule=import_constraint_ss)
+
+def export_constraint_ss(model, s, t):
+    return model.grid_export_P_SS[s, t] <= model.P_line_max* (1 - model.is_importing_SS[s, t])
+model.export_limit_ss = pyo.Constraint(model.S, model.T_SS, rule=export_constraint_ss)
 
 
 #  ---- Link between stages ----
@@ -233,8 +263,13 @@ model.objective = pyo.Objective(
 #######################
 
 solver = SolverFactory('glpk')
-
 results = solver.solve(model, tee=False)
+
+
+print('---------------------------')
+print("Status:", results.solver.status)
+print("Termination:", results.solver.termination_condition)
+print('---------------------------')
 
 # if results.solver.termination_condition == pyo.TerminationCondition.optimal:
 #     print('Optimal solution found!')
@@ -252,6 +287,8 @@ results = solver.solve(model, tee=False)
 #     print('Termination:', results.solver.termination_condition)
 
 print('---------------------------')
+print(f'First stage value: {pyo.value(model.FirstStageCost):.2f} kr')
+print(f'Second stage value: {pyo.value(model.SecondStageCost):.2f} kr')
 print(f'Objective value: {pyo.value(model.objective):.2f} kr')
 print('---------------------------')
 
@@ -335,6 +372,7 @@ plots = [
     (axes[1, 0], grid_P, 'Grid Power', 'Power [kW]'),
     (axes[1, 1], pv_P, 'PV Production', 'Power [kW]'),
 ]
+fig.suptitle("Scenatio: " + scenario, fontsize=16)
 
 for ax, data, title, ylabel in plots:
     ax.step(xs, data, label=title, color='tab:blue', where='post')

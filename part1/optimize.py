@@ -7,8 +7,8 @@ import matplotlib.pyplot as plt
 # Python Variables
 #######################
 
-
-P_max            = 5    # kW
+P_line           = 4
+P_max            = 4    # kW
 battery_E_max    = 20   # kWh
 battery_E_0      = 0    # kWh
 battery_eff      = 0.95 # %
@@ -49,9 +49,10 @@ model.battery_discharge_P = pyo.Var(model.T, initialize=0, bounds=(0, P_max)) # 
 model.is_charging = pyo.Var(model.T, initialize=0, domain=pyo.Binary) # 0|1
 
 # Power in/out of grid
-model.grid_import_P = pyo.Var(model.T, initialize=0, bounds=(0, P_max)) # kW
-model.grid_export_P = pyo.Var(model.T, initialize=0, bounds=(0, None)) # kW
+model.grid_import_P = pyo.Var(model.T, initialize=0, bounds=(0, P_line)) # kW
+model.grid_export_P = pyo.Var(model.T, initialize=0, bounds=(0, P_line)) # kW
 
+model.loss_P = pyo.Var(model.T, initialize=0, bounds=(0, None)) # kW
 
 
 
@@ -81,7 +82,7 @@ model.initial_battery_constraint = pyo.Constraint(
 
 # Energy balance constraint
 def energy_balance_constraint(model, t):
-    return (model.PV_P_prod[t] + model.grid_import_P[t] + model.battery_discharge_P[t]) == (model.battery_charge_P[t] + model.grid_export_P[t])
+    return (model.PV_P_prod[t] + model.grid_import_P[t] + model.battery_discharge_P[t] - model.loss_P[t]) == (model.battery_charge_P[t] + model.grid_export_P[t])
 model.energy_balance = pyo.Constraint(model.T, rule=energy_balance_constraint)
 
 
@@ -108,7 +109,9 @@ model.battery_energy_balance = pyo.Constraint(model.T, rule=battery_capacity_con
 
 # Maximize the revenue from selling energy
 def objective_rule(model):
-    return dt*sum( model.spot_price[t]*( (model.grid_export_P[t])) - model.grid_import_P[t]*0.5 - battery_cyc_cost*(model.battery_charge_P[t] - model.battery_discharge_P[t]) for t in model.T )
+    return dt*sum( model.spot_price[t]*( (model.grid_export_P[t]) -  model.grid_import_P[t] - model.loss_P[t]) - 
+                   battery_cyc_cost*(model.battery_charge_P[t] - model.battery_discharge_P[t] ) 
+            for t in model.T )
 model.objective = pyo.Objective(rule=objective_rule, sense=pyo.maximize)
 
 
@@ -120,7 +123,7 @@ model.objective = pyo.Objective(rule=objective_rule, sense=pyo.maximize)
 
 solver = SolverFactory('glpk')
 
-results = solver.solve(model, tee=True)
+results = solver.solve(model, tee=False)
 
 # if results.solver.termination_condition == pyo.TerminationCondition.optimal:
 #     print('Optimal solution found!')
@@ -148,6 +151,8 @@ print('---------------------------')
 
 xs    = [t for t in model.T]
 price = [pyo.value(model.spot_price[t]) for t in model.T]
+loss = [pyo.value(model.loss_P[t]) for t in model.T]
+
 
 battery_E = [pyo.value(model.battery_E[t]) for t in model.T]
 battery_P = [pyo.value(model.battery_charge_P[t])- pyo.value(model.battery_discharge_P[t]) for t in model.T]
@@ -160,6 +165,7 @@ pv_price = sum( pv_P[t]*price[t]*dt for t in model.T )
 print('---------------------------')
 print('PV energy:', pv_E)
 print('PV price:', pv_price)
+print('Loss', loss)
 print('---------------------------')
 
 

@@ -86,42 +86,6 @@ pv_data.update({
 model.PV_P_prod = pyo.Param(model.S_all, model.T, initialize=pv_data)
 
 
-#######################
-# Expected Value Approximation
-#######################
-
-# Expected PV power at each time step [kW]
-model.P_PV_EV = pyo.Param(
-    model.T,
-    initialize=lambda model, t: sum(
-        model.pi[s] * model.PV_P_prod[s, t]
-        for s in model.S
-    )
-)
-
-# Expected total PV energy [kWh]
-model.E_PV_EV = pyo.Param(
-    initialize=sum(
-        model.pi[s] * model.PV_P_prod[s, t] * model.dt
-        for s in model.S
-        for t in model.T
-    )
-)
-
-# Expected gross PV value at spot prices [NOK]
-model.price_EV = pyo.Param(
-    initialize=sum(
-        model.pi[s] * model.spot_price[t]
-        * model.PV_P_prod[s, t] * model.dt
-        for s in model.S
-        for t in model.T
-    )
-)
-
-print('---------------------------')
-print(f'Expected PV energy: {pyo.value(model.E_PV_EV):.2f} kWh')
-print(f'Expected PV value: {pyo.value(model.price_EV):.2f} NOK')
-
 
 #######################
 # Decision Variables

@@ -2,6 +2,7 @@ import pyomo.environ as pyo
 from pyomo.opt import SolverFactory
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 
 #######################
 # Python Variables
@@ -33,15 +34,13 @@ pv_data = {
 
 pi = {'s1': 1/3, 's2': 1/3, 's3': 1/3}
 
-senarios = ['s1', 's2', 's3']
+scenarios = ['s1', 's2', 's3']
 
 #######################
 # Setup
 #######################
 
 model = pyo.ConcreteModel()
-
-
 
 
 #######################
@@ -58,11 +57,11 @@ model.T_battery = pyo.RangeSet(0, len(df_price['price_nok_kwh']))
 model.PV_P_EV = pyo.Param(model.T,
     initialize=lambda model, t: sum(
         pi[s] * pv_data[s, t]
-        for s in senarios
+        for s in scenarios
     )
 )
 
-model.spot_price    = pyo.Param(model.T, initialize=dict(enumerate(df_price['price_nok_kwh'])))
+model.spot_price = pyo.Param(model.T, initialize=dict(enumerate(df_price['price_nok_kwh'])))
 
 
 model.P_line = pyo.Param(initialize=5)            # kW
@@ -74,6 +73,25 @@ model.battery_eff =  pyo.Param(initialize=0.95)    # %
 model.bat_cycle_cost = pyo.Param(initialize=0.35)  # NOK/kWh 
 model.dt = pyo.Param(initialize=0.25)              # hours
 
+
+surplus_energy_by_scenario = {}
+
+
+for scenario, df in power_dfs.items():
+    pv = df["power_kw"].to_numpy()
+    surplus_power = np.maximum(0, pv - pyo.value(model.P_line))
+
+    surplus_energy_by_scenario[scenario] = surplus_power.sum() * 0.25
+
+delta_price = df_price['price_nok_kwh'].max() - df_price['price_nok_kwh'].min()
+
+expected_surplus_energy = sum(
+    pi[s] * surplus_energy_by_scenario[s]
+    for s in pi
+)
+
+EV = 0.25*sum( pyo.value(model.PV_P_EV[t])*pyo.value(model.spot_price[t])  for t in model.T) + expected_surplus_energy*delta_price
+print(EV)
 
 #######################
 # Decision Variables
@@ -134,9 +152,8 @@ model.battery_energy_balance = pyo.Constraint(model.T, rule=battery_capacity_con
 
 # Maximize the revenue from selling energy
 def objective_rule(model):
-    return model.dt*sum( model.spot_price[t]*( (model.grid_export_P[t]) -  model.grid_import_P[t] - model.loss_P[t]) - 
-                   model.bat_cycle_cost*(model.battery_charge_P[t] - model.battery_discharge_P[t] ) 
-            for t in model.T )
+    return model.dt*sum( model.spot_price[t]*( (model.grid_export_P[t]) -  model.grid_import_P[t] - model.loss_P[t])  - model.bat_cycle_cost*model.battery_discharge_P[t]
+        for t in model.T )
 model.objective = pyo.Objective(rule=objective_rule, sense=pyo.maximize)
 
 
@@ -155,6 +172,60 @@ print('Status:', results.solver.status)
 print('Termination:', results.solver.termination_condition)
 print(f'Objective value: {pyo.value(model.objective):.2f} kr')
 
+
+
+dt = pyo.value(model.dt)
+cycle_cost = pyo.value(model.bat_cycle_cost)
+P_line = pyo.value(model.P_line)
+
+# Extract the optimised EVA battery schedule
+P_charge = np.array([
+    pyo.value(model.battery_charge_P[t])
+    for t in model.T
+])
+
+P_discharge = np.array([
+    pyo.value(model.battery_discharge_P[t])
+    for t in model.T
+])
+
+price = np.array([
+    pyo.value(model.spot_price[t])
+    for t in model.T
+])
+
+# Evaluate the same schedule under each PV scenario
+scenario_profit = {}
+
+for s, df in power_dfs.items():
+    pv = df["power_kw"].to_numpy()
+
+    # Net power available for grid exchange
+    net = pv + P_discharge - P_charge
+
+    P_export = np.minimum(np.maximum(net, 0), P_line)
+    P_import = np.minimum(np.maximum(-net, 0), P_line)
+    P_curtail = np.maximum(net - P_line, 0)
+
+    profit = dt * np.sum(
+        price * (P_export - P_import - P_curtail)
+        - cycle_cost * P_discharge
+    )
+
+    scenario_profit[s] = profit
+
+# Expected profit using the scenario probabilities
+expected_profit = sum(
+    pi[s] * scenario_profit[s]
+    for s in scenarios
+)
+
+print('---------------------------')
+print("EVA objective:", pyo.value(model.objective))
+print("Scenario profits:", scenario_profit)
+print("Expected realised profit:", expected_profit)
+
+quit()
 
 #######################
 # Data
@@ -178,7 +249,73 @@ print('PV energy:', pv_E)
 print('PV price:', pv_price)
 print('Loss', loss)
 print('---------------------------')
+# Fixed battery schedule from the solved EVA model
+charge = {
+    t: pyo.value(model.battery_charge_P[t])
+    for t in model.T
+}
+discharge = {
+    t: pyo.value(model.battery_discharge_P[t])
+    for t in model.T
+}
 
+scenario_revenues = {}
+
+for s in scenarios:
+    m_eval = pyo.ConcreteModel()
+    m_eval.T = pyo.RangeSet(0, n_steps - 1)
+
+    m_eval.grid_import = pyo.Var(
+        m_eval.T, bounds=(0, 5)
+    )
+    m_eval.grid_export = pyo.Var(
+        m_eval.T, bounds=(0, 5)
+    )
+    m_eval.loss = pyo.Var(
+        m_eval.T, domain=pyo.NonNegativeReals
+    )
+
+    # Actual PV production for this scenario
+    m_eval.balance = pyo.Constraint(
+        m_eval.T,
+        rule=lambda m, t: (
+            pv_data[s, t]
+            + m.grid_import[t]
+            + discharge[t]
+            - m.loss[t]
+            == charge[t] + m.grid_export[t]
+        )
+    )
+
+    m_eval.objective = pyo.Objective(
+        expr=0.25 * sum(
+            float(price[t]) * (
+                m_eval.grid_export[t]
+                - m_eval.grid_import[t]
+                - m_eval.loss[t]
+            )
+            - 0.35 * discharge[t]
+            for t in m_eval.T
+        ),
+        sense=pyo.maximize
+    )
+
+    solver.solve(m_eval)
+
+    scenario_revenues[s] = pyo.value(m_eval.objective)
+
+for s in scenarios:
+    print(
+        f"{s}: revenue = {scenario_revenues[s]:.2f} NOK, "
+        f"weighted = {pi[s] * scenario_revenues[s]:.2f} NOK"
+    )
+
+expected_EVA_revenue = sum(
+    pi[s] * scenario_revenues[s]
+    for s in scenarios
+)
+
+print(f"Expected EVA revenue: {expected_EVA_revenue:.2f} NOK")
 
 #######################
 # Plot

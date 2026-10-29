@@ -54,8 +54,8 @@ model = pyo.ConcreteModel()
 # Parameters
 #######################
 
+model.P_line = pyo.Param(initialize=5)             # kW
 model.P_max = pyo.Param(initialize=5)             # kW
-model.P_line_max = pyo.Param(initialize=5.375)             # kW
 model.battery_E_max = pyo.Param(initialize=20)    # kWh
 model.battery_E_0 = pyo.Param(initialize=0)       # kWh
 
@@ -95,13 +95,6 @@ model.PV_P_prod = pyo.Param(model.S, model.T, initialize=pv_data)
 
 
 model.P_PV_EV  = pyo.Param(model.T, initialize=lambda model, t: sum(model.pi[s] * model.PV_P_prod[s, t] for s in model.S))
-model.E_PV_EV  = pyo.Param(initialize=sum(model.pi[s] * model.PV_P_prod[s, t] * model.dt for t in model.T for s in model.S))
-model.price_EV = pyo.Param(initialize=sum(model.pi[s] * model.spot_price[t] * model.PV_P_prod[s, t] * model.dt for t in model.T for s in model.S))
-
-print('---------------------------')
-print(f'Exptected Energy PV {pyo.value(model.E_PV_EV):.2f} kWh')
-print(f'Exptected Price {pyo.value(model.price_EV):.2f} kr')
-print('---------------------------')
 
 
 #######################
@@ -125,6 +118,8 @@ model.grid_import_P_FS = pyo.Var(model.T_FS, initialize=0, bounds=(0, None), dom
 model.grid_export_P_FS = pyo.Var(model.T_FS, initialize=0, bounds=(0, None), domain=pyo.Reals) # kW
 model.is_importing_FS  = pyo.Var(model.T_FS, initialize=0, domain=pyo.Binary) # 0|1
 
+model.loss_P_FS = pyo.Var(model.T_FS, initialize=0, bounds=(0, None), domain=pyo.Reals) # kW 
+
 
 # ---- Second stage  ---- Defined over second half of T and S
 
@@ -141,7 +136,7 @@ model.grid_import_P_SS = pyo.Var(model.S, model.T_SS, initialize=0, bounds=(0, N
 model.grid_export_P_SS = pyo.Var(model.S, model.T_SS, initialize=0, bounds=(0, None), domain=pyo.Reals) # kW
 model.is_importing_SS  = pyo.Var(model.S, model.T_SS, initialize=0, domain=pyo.Binary) # 0|1
 
-
+model.loss_P_SS = pyo.Var(model.S, model.T_SS, initialize=0, bounds=(0, None), domain=pyo.Reals) # kW 
 
 
 #######################
@@ -156,7 +151,7 @@ model.initial_battery_constraint = pyo.Constraint(
 
 # Energy balance constraint
 def energy_balance_constraint_fs(model, t):
-    return (model.PV_P_prod['s1', t] + model.grid_import_P_FS[t] + model.battery_discharge_P_FS[t]) == (model.battery_charge_P_FS[t] + model.grid_export_P_FS[t])
+    return (model.PV_P_prod['s1', t] + model.grid_import_P_FS[t] + model.battery_discharge_P_FS[t]) == (model.battery_charge_P_FS[t] + model.grid_export_P_FS[t] + model.loss_P_FS[t])
 model.energy_balance_fs = pyo.Constraint(model.T_FS, rule=energy_balance_constraint_fs)
 
 
@@ -178,11 +173,11 @@ model.battery_energy_balance_fs = pyo.Constraint(model.T_FS, rule=battery_capaci
 
 # Import/export constraint
 def import_constraint_fs(model, t):
-    return model.grid_import_P_FS[t] <= model.P_line_max* model.is_importing_FS[t]
+    return model.grid_import_P_FS[t] <= model.P_line* model.is_importing_FS[t]
 model.import_limit_fs = pyo.Constraint(model.T_FS, rule=import_constraint_fs)
 
 def export_constraint_fs(model, t):
-    return model.grid_export_P_FS[t] <= model.P_line_max* model.is_importing_FS[t]
+    return model.grid_export_P_FS[t] <= model.P_line* model.is_importing_FS[t]
 model.export_limit_fs = pyo.Constraint(model.T_FS, rule=export_constraint_fs)
 
 
@@ -192,7 +187,7 @@ model.export_limit_fs = pyo.Constraint(model.T_FS, rule=export_constraint_fs)
 
 # Energy balance constraint
 def energy_balance_constraint_ss(model, s, t):
-    return (model.PV_P_prod[s, t] + model.grid_import_P_SS[s, t] + model.battery_discharge_P_SS[s, t]) == (model.battery_charge_P_SS[s, t] + model.grid_export_P_SS[s, t])
+    return (model.PV_P_prod[s, t] + model.grid_import_P_SS[s, t] + model.battery_discharge_P_SS[s, t]) == (model.battery_charge_P_SS[s, t] + model.grid_export_P_SS[s, t] + model.loss_P_SS[s, t])
 model.energy_balance_ss = pyo.Constraint(model.S, model.T_SS, rule=energy_balance_constraint_ss)
 
 
@@ -215,11 +210,11 @@ model.battery_energy_balance_ss = pyo.Constraint(model.S, model.T_SS, rule=batte
 
 # Import/export constraint
 def import_constraint_ss(model, s, t):
-    return model.grid_import_P_SS[s, t] <= model.P_line_max * model.is_importing_SS[s, t]
+    return model.grid_import_P_SS[s, t] <= model.P_line * model.is_importing_SS[s, t]
 model.import_limit_ss = pyo.Constraint(model.S, model.T_SS, rule=import_constraint_ss)
 
 def export_constraint_ss(model, s, t):
-    return model.grid_export_P_SS[s, t] <= model.P_line_max* (1 - model.is_importing_SS[s, t])
+    return model.grid_export_P_SS[s, t] <= model.P_line* (1 - model.is_importing_SS[s, t])
 model.export_limit_ss = pyo.Constraint(model.S, model.T_SS, rule=export_constraint_ss)
 
 

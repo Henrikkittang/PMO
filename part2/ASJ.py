@@ -18,24 +18,16 @@ df_power_s3 = pd.read_csv('./data/power_s3.csv')
 # Check that every series covers the same horizon
 n_steps = len(df_price)
 
-df_power_s1.loc[:47, 'power_kw'] = df_power_s3['power_kw'].iloc[:48]
-df_power_s2.loc[:47, 'power_kw'] = df_power_s3['power_kw'].iloc[:48]
+df_power_s1.iloc[:48, df_power_s1.columns.get_loc('power_kw')] = (
+    df_power_s3['power_kw'].iloc[:48].to_numpy()
+)
 
+df_power_s2.iloc[:48, df_power_s2.columns.get_loc('power_kw')] = (
+    df_power_s3['power_kw'].iloc[:48].to_numpy()
+)
 
 power_dfs = {'s1': df_power_s1, 's2': df_power_s2, 's3': df_power_s3}
 
-# xs = range(len(df_power_s1))
-# # Original power
-# plt.plot(xs, df_power_s1['power_kw'], label='S1', linewidth=2)
-# plt.plot(xs, df_power_s2['power_kw'], label='S2', linewidth=2)
-# plt.plot(xs, df_power_s3['power_kw'], label='S3', linewidth=2)
-# 
-# plt.xlabel('Timestep')
-# plt.ylabel('Power (kW)')
-# plt.legend()
-# plt.grid(True)
-# plt.tight_layout()
-# plt.show()
 
  
 model = pyo.ConcreteModel()
@@ -109,6 +101,7 @@ model.grid_export_P = pyo.Var(model.S_all, model.T, initialize=0, bounds=(0, mod
 
 model.loss_P = pyo.Var(model.S_all, model.T, initialize=0, bounds=(0, None),        domain=pyo.NonNegativeReals) # kW
 
+model.is_importing = pyo.Var(model.S_all, model.T, initialize=0, domain=pyo.Binary) # 0|1
 
 
 #######################
@@ -127,6 +120,13 @@ def charge_constraint(model, s, t):
 
 def discharge_constraint(model, s, t):
     return model.battery_discharge_P[s, t] <= model.P_max* (1 - model.is_charging[s, t])
+
+# Import/export constraint
+def import_constraint(model, s, t):
+    return model.grid_import_P[s, t] <= model.P_line* model.is_importing[s, t]
+
+def export_constraint(model, s, t):
+    return model.grid_export_P[s, t] <= model.P_line* (1 - model.is_importing[s, t])
 
 
 # Battery capacity constraint
@@ -147,6 +147,8 @@ model.energy_balance_fs         = pyo.Constraint(['fs'], model.T_FS, rule=energy
 model.charge_limit_fs           = pyo.Constraint(['fs'], model.T_FS, rule=charge_constraint)
 model.discharge_limit_fs        = pyo.Constraint(['fs'], model.T_FS, rule=discharge_constraint)
 model.battery_energy_balance_fs = pyo.Constraint(['fs'], model.T_FS, rule=battery_capacity_constraint)
+model.import_limit_fs           = pyo.Constraint(['fs'], model.T_FS, rule=import_constraint)
+model.export_limit_fs           = pyo.Constraint(['fs'], model.T_FS, rule=export_constraint)
 
 
 #  ---- Second stage ----
@@ -155,6 +157,8 @@ model.energy_balance_ss         = pyo.Constraint(model.S, model.T_SS, rule=energ
 model.charge_limit_ss           = pyo.Constraint(model.S, model.T_SS, rule=charge_constraint)
 model.discharge_limit_ss        = pyo.Constraint(model.S, model.T_SS, rule=discharge_constraint)
 model.battery_energy_balance_ss = pyo.Constraint(model.S, model.T_SS, rule=battery_capacity_constraint)
+model.import_limit_ss           = pyo.Constraint(model.S, model.T_SS, rule=import_constraint)
+model.export_limit_ss           = pyo.Constraint(model.S, model.T_SS, rule=export_constraint)
 
 
 #  ---- Link between stages ----
@@ -181,11 +185,20 @@ def first_stage_import_link(model, s, t):
 def first_stage_export_link(model, s, t):
     return model.grid_export_P[s, t] == model.grid_export_P['fs', t]
 
+def first_stage_ploss_link(model, s, t):
+    return model.loss_P[s, t] == model.loss_P['fs', t]
+
+def first_stage_importing_link(model, s, t):
+    return (model.is_importing[s, t]== model.is_importing['fs', t])
+
+
 model.first_stage_charge_link    = pyo.Constraint(model.S, model.T_FS, rule=first_stage_charge_link)
 model.first_stage_discharge_link = pyo.Constraint(model.S, model.T_FS, rule=first_stage_discharge_link)
 model.first_stage_charging_link  = pyo.Constraint(model.S, model.T_FS, rule=first_stage_charging_link)
 model.first_stage_import_link    = pyo.Constraint(model.S, model.T_FS, rule=first_stage_import_link)
 model.first_stage_export_link    = pyo.Constraint(model.S, model.T_FS, rule=first_stage_export_link)
+model.first_stage_importing_link = pyo.Constraint(model.S, model.T_FS, rule=first_stage_importing_link)
+model.first_stage_ploss_link     = pyo.Constraint(model.S, model.T_FS, rule=first_stage_ploss_link)
 
 
 
@@ -198,7 +211,7 @@ model.first_stage_export_link    = pyo.Constraint(model.S, model.T_FS, rule=firs
 # First-stage profit: counted once, because decisions are shared
 model.cost_fs = pyo.Expression(
     expr=model.dt * sum(
-        model.spot_price[t] * (model.grid_export_P['fs', t] - model.grid_import_P['fs', t] - model.loss_P['fs', t])
+        model.spot_price[t] * (model.grid_export_P['fs', t] - model.grid_import_P['fs', t] )
         - model.bat_cycle_cost * model.battery_discharge_P['fs', t]
         for t in model.T_FS
     )
@@ -208,8 +221,8 @@ model.cost_fs = pyo.Expression(
 model.cost_ss = pyo.Expression(
     expr=sum(
         model.pi[s] * model.dt * sum(
-            model.spot_price[t] * (model.grid_export_P[s, t] - model.grid_import_P[s, t] - model.loss_P[s, t])
-            - model.bat_cycle_cost * model.battery_discharge_P[s, t]
+            model.spot_price[t] * (model.grid_export_P[s, t] - model.grid_import_P[s, t] )
+            - model.bat_cycle_cost * model.battery_discharge_P[s, t] 
             for t in model.T_SS
         )
         for s in model.S
@@ -240,7 +253,7 @@ print(f'Objective value: {pyo.value(model.objective):.2f} kr')
 # Data
 #######################
 
-scenario = 's3'
+scenario = 's1'
 half = n_steps // 2
 dt = pyo.value(model.dt)
 

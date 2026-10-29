@@ -57,9 +57,7 @@ def build_model(pv_values):
 
     m.PV_P_prod = pyo.Param(
         m.T,
-        initialize={
-            t: float(pv_values[t]) for t in range(n_steps)
-        }
+        initialize={t: float(pv_values[t]) for t in range(n_steps)}
     )
 
     # Decision variables

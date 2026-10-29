@@ -138,9 +138,14 @@ def battery_capacity_constraint(model, s, t):
 
 #  ---- First stage ----
 
-model.initial_battery_constraint = pyo.Constraint(
-    expr=model.battery_E['fs', 0] == model.battery_E_0
-)
+# model.initial_battery_constraint = pyo.Constraint(
+#     expr=model.battery_E['fs', 0] == model.battery_E_0
+# )
+
+# Battery capacity constraint
+def initial_battery_constraint(model, s):
+    return model.battery_E[s, 0] == model.battery_E_0
+model.initial_battery = pyo.Constraint(model.S_all, rule=initial_battery_constraint)
 
 
 model.energy_balance_fs         = pyo.Constraint(['fs'], model.T_FS, rule=energy_balance_constraint)
